@@ -1,0 +1,66 @@
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import api from '../lib/api';
+
+export function useAuth() {
+  const [user, setUser] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const verifyToken = async () => {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        setUser(null);
+        setIsLoggedIn(false);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await api.get('/api/auth/verify');
+        setUser(response.data.user);
+        setIsLoggedIn(true);
+      } catch (error) {
+        console.error('Token verification failed:', error);
+        localStorage.removeItem('token');
+        setUser(null);
+        setIsLoggedIn(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    verifyToken();
+  }, []);
+
+  const login = async (email, password) => {
+    try {
+      const response = await api.post('/api/auth/login', { email, password });
+      localStorage.setItem('token', response.data.token);
+      setUser(response.data.user);
+      setIsLoggedIn(true);
+      return response.data;
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    setIsLoggedIn(false);
+    router.push('/login');
+  };
+
+  return {
+    user,
+    isLoggedIn,
+    isLoading,
+    login,
+    logout
+  };
+}
