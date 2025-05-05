@@ -4,6 +4,7 @@
   "main": "index.js",
   "dependencies": {
     "@aws-sdk/client-route-53-domains": "^3.787.0",
+    "@aws-sdk/client-s3": "^3.802.0",
     "@aws-sdk/client-sqs": "^3.787.0",
     "aws-sdk": "^2.1692.0",
     "axios": "^1.8.4",

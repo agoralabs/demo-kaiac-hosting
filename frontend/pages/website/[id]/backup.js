@@ -4,8 +4,11 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../../../hooks/useAuth';
 import Layout from '../../../components/Layout';
 import WebSitePage from '../../../components/WebSitePage';
-import Modal from '../../../components/Modal';
 import BackupNoteModal from '../../../components/hosting/BackupNoteModal';
+import DeleteBackupModal from '../../../components/hosting/DeleteBackupModal';
+import BackupSettingsConfirmModal from '../../../components/hosting/BackupSettingsConfirmModal';
+import RestoreBackupModal from '../../../components/hosting/RestoreBackupModal';
+import RestoreSuccessModal from '../../../components/hosting/RestoreSuccessModal';
 import { 
   ArrowPathIcon, 
   ExclamationCircleIcon,
@@ -13,9 +16,12 @@ import {
   CalendarIcon,
   ArrowDownTrayIcon,
   PlusCircleIcon,
-  CheckCircleIcon
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import api from '../../../lib/api';
+import toast from 'react-hot-toast';
 
 export default function WebsiteBackup() {
   const router = useRouter();
@@ -26,8 +32,25 @@ export default function WebsiteBackup() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creatingBackup, setCreatingBackup] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [backupToDelete, setBackupToDelete] = useState(null);
+  const [deletingBackup, setDeletingBackup] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [backupToRestore, setBackupToRestore] = useState(null);
+  const [domains, setDomains] = useState([]);
+  const [userSubscriptions, setUserSubscriptions] = useState([]);
+  const [isBackupNoteModalOpen, setIsBackupNoteModalOpen] = useState(false);
+  const [isRestoreSuccessModalOpen, setIsRestoreSuccessModalOpen] = useState(false);
+  const [restoredSite, setRestoredSite] = useState(null);
+  // État pour la pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [perPage, setPerPage] = useState(5);
+  const [totalItems, setTotalItems] = useState(0);
+  
+  const perPageOptions = [5, 10, 20, 50];
   
   // Paramètres de sauvegarde
   const [backupFrequency, setBackupFrequency] = useState('');
@@ -41,6 +64,7 @@ export default function WebsiteBackup() {
   const [notifyOnFailure, setNotifyOnFailure] = useState(true);
   const [notifyEmail, setNotifyEmail] = useState('');
   
+  
   useEffect(() => {
     // Only fetch data when id is available (after hydration)
     if (!id || !user) return;
@@ -52,9 +76,45 @@ export default function WebsiteBackup() {
         const websiteResponse = await api.get(`/api/website/get-infos/${id}`);
         setWebsite(websiteResponse.data.data);
         
-        // Fetch backups for this website
-        const backupsResponse = await api.get(`/api/website/${id}/backups`);
+        // Fetch backups for this website with pagination
+        const backupsResponse = await api.get(`/api/website/${id}/backups`, {
+          params: {
+            page: currentPage,
+            per_page: perPage
+          }
+        });
+        
         setBackups(backupsResponse.data.data || []);
+        
+        // Set pagination data if available in response
+        if (backupsResponse.data.meta) {
+          setTotalPages(backupsResponse.data.meta.last_page || 1);
+          setTotalItems(backupsResponse.data.meta.total || 0);
+        }
+        
+        // Fetch domains for restore modal
+        const domainsResponse = await api.get('/api/user/domains');
+        setDomains(domainsResponse.data.data || []);
+        
+        const websitesResponse = await api.get('/api/user/websites');
+        const websitesData = websitesResponse.data.data || [];
+        // Fetch user subscriptions for restore modal
+        const subscriptionsResponse = await api.get('/api/user/subscriptions/hosting');
+        const subscriptionsData = subscriptionsResponse.data.data || [];
+
+        // Enrichir les abonnements avec les sites web et les infos du plan
+        const enrichedSubscriptions = subscriptionsData.map(sub => {
+          const websites = websitesData.filter(web => web.subscription_id === sub.id);
+          return {
+            ...sub,
+            websites,
+            websites_count: websites.length,
+            // Supposons que le plan contient un champ max_websites
+            max_websites: sub.Plan?.included_sites || 1
+          };
+        });
+
+        setUserSubscriptions(enrichedSubscriptions);
         
         // Fetch backup settings if available
         try {
@@ -89,7 +149,7 @@ export default function WebsiteBackup() {
     };
 
     fetchWebsiteAndBackups();
-  }, [id, user]);
+  }, [id, user, currentPage, perPage]);
 
   const saveBackupSettings = async () => {
     if (!id) return;
@@ -111,12 +171,61 @@ export default function WebsiteBackup() {
       
       setIsConfirmModalOpen(false);
       // Optionally show a success message
-      alert('Paramètres de sauvegarde enregistrés avec succès.');
+      toast.success('Paramètres de sauvegarde enregistrés avec succès.');
     } catch (err) {
       console.error('Failed to save backup settings', err);
-      alert('Impossible d\'enregistrer les paramètres de sauvegarde. Veuillez réessayer plus tard.');
+      toast.error('Impossible d\'enregistrer les paramètres de sauvegarde. Veuillez réessayer plus tard.');
     } finally {
       setSavingSettings(false);
+    }
+  
+  };
+
+  const openDeleteModal = (backup) => {
+    setBackupToDelete(backup);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setBackupToDelete(null);
+  };
+
+  const confirmDeleteBackup = async () => {
+    if (!backupToDelete || !id) return;
+    
+    try {
+      setDeletingBackup(true);
+      await api.delete(`/api/website/${id}/backups/${backupToDelete.id}`);
+      
+      // Refresh the backups list after deletion
+      const backupsResponse = await api.get(`/api/website/${id}/backups`, {
+        params: {
+          page: currentPage,
+          per_page: perPage
+        }
+      });
+      
+      // If current page is now empty (except for the last page), go to previous page
+      if (backupsResponse.data.data.length === 0 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        setBackups(backupsResponse.data.data || []);
+        
+        if (backupsResponse.data.meta) {
+          setTotalPages(backupsResponse.data.meta.last_page || 1);
+          setTotalItems(backupsResponse.data.meta.total || 0);
+        }
+      }
+      
+      // Close the modal
+      closeDeleteModal();
+      toast.success('La sauvegarde a été supprimée avec succès.');
+    } catch (err) {
+      console.error('Failed to delete backup', err);
+      toast.error('Impossible de supprimer la sauvegarde. Veuillez réessayer plus tard.');
+    } finally {
+      setDeletingBackup(false);
     }
   };
 
@@ -128,7 +237,7 @@ export default function WebsiteBackup() {
     setIsConfirmModalOpen(false);
   };
   
-  const [isBackupNoteModalOpen, setIsBackupNoteModalOpen] = useState(false);
+  
   
   const openBackupNoteModal = () => {
     setIsBackupNoteModalOpen(true);
@@ -138,6 +247,32 @@ export default function WebsiteBackup() {
     setIsBackupNoteModalOpen(false);
   };
   
+  const openRestoreModal = (backup) => {
+    setBackupToRestore(backup);
+    setIsRestoreModalOpen(true);
+  };
+
+  const closeRestoreModal = () => {
+    setIsRestoreModalOpen(false);
+    setBackupToRestore(null);
+  };
+
+  const handleRestoreSuccess = (site) => {
+    // Rafraîchir les données après une restauration réussie
+    if (id) {
+      api.get(`/api/website/get-infos/${id}`)
+        .then(response => {
+          setWebsite(response.data.data);
+          // Stocker le site restauré et ouvrir la modale de succès
+          setRestoredSite(site);
+          setIsRestoreSuccessModalOpen(true);
+        })
+        .catch(error => {
+          console.error('Erreur lors du rafraîchissement des informations du site:', error);
+        });
+    }
+  };  
+
   const createBackup = async (note = '') => {
     if (!id) return;
     
@@ -145,15 +280,28 @@ export default function WebsiteBackup() {
       setCreatingBackup(true);
       const response = await api.post(`/api/website/${id}/backups-manual`, { note });
       
-      // Add the new backup to the list
-      setBackups(prevBackups => [response.data.data, ...prevBackups]);
+      // Refresh the backups list after creating a new one
+      const backupsResponse = await api.get(`/api/website/${id}/backups`, {
+        params: {
+          page: 1, // Return to first page after creating a new backup
+          per_page: perPage
+        }
+      });
+      
+      setBackups(backupsResponse.data.data || []);
+      setCurrentPage(1);
+      
+      if (backupsResponse.data.meta) {
+        setTotalPages(backupsResponse.data.meta.last_page || 1);
+        setTotalItems(backupsResponse.data.meta.total || 0);
+      }
       
       // Close the modal if it was open
       closeBackupNoteModal();
       
     } catch (err) {
       console.error('Failed to create backup', err);
-      alert('Impossible de créer la sauvegarde. Veuillez réessayer plus tard.');
+      toast.error('Impossible de créer la sauvegarde. Veuillez réessayer plus tard.');
     } finally {
       setCreatingBackup(false);
     }
@@ -175,25 +323,13 @@ export default function WebsiteBackup() {
       link.remove();
     } catch (err) {
       console.error('Failed to download backup', err);
-      alert('Impossible de télécharger la sauvegarde. Veuillez réessayer plus tard.');
+      toast.error('Impossible de télécharger la sauvegarde. Veuillez réessayer plus tard.');
     }
   };
 
-  const restoreBackup = async (backupId) => {
-    if (!confirm('Êtes-vous sûr de vouloir restaurer cette sauvegarde ? Cette action remplacera toutes les données actuelles du site.')) {
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      await api.post(`/api/website/${id}/backups/${backupId}/restore`);
-      alert('La sauvegarde a été restaurée avec succès.');
-    } catch (err) {
-      console.error('Failed to restore backup', err);
-      alert('Impossible de restaurer la sauvegarde. Veuillez réessayer plus tard.');
-    } finally {
-      setLoading(false);
-    }
+  const restoreBackup = async (backup) => {
+    // Ouvrir la modal de restauration au lieu de faire une confirmation simple
+    openRestoreModal(backup);
   };
 
   const deleteBackup = async (backupId) => {
@@ -203,12 +339,108 @@ export default function WebsiteBackup() {
     
     try {
       await api.delete(`/api/website/${id}/backups/${backupId}`);
-      // Remove the deleted backup from the list
-      setBackups(prevBackups => prevBackups.filter(backup => backup.id !== backupId));
+      
+      // Refresh the backups list after deletion
+      const backupsResponse = await api.get(`/api/website/${id}/backups`, {
+        params: {
+          page: currentPage,
+          per_page: perPage
+        }
+      });
+      
+      // If current page is now empty (except for the last page), go to previous page
+      if (backupsResponse.data.data.length === 0 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        setBackups(backupsResponse.data.data || []);
+        
+        if (backupsResponse.data.meta) {
+          setTotalPages(backupsResponse.data.meta.last_page || 1);
+          setTotalItems(backupsResponse.data.meta.total || 0);
+        }
+      }
     } catch (err) {
       console.error('Failed to delete backup', err);
-      alert('Impossible de supprimer la sauvegarde. Veuillez réessayer plus tard.');
+      toast.error('Impossible de supprimer la sauvegarde. Veuillez réessayer plus tard.');
     }
+  };
+  
+  const handlePerPageChange = (e) => {
+    const newPerPage = Number(e.target.value);
+    setPerPage(newPerPage);
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+  
+  const Pagination = () => {
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4 py-4 bg-white rounded-lg shadow-sm border-t border-gray-200">
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>Éléments par page:</span>
+          <select
+            value={perPage}
+            onChange={handlePerPageChange}
+            className="rounded-md border-gray-300 py-1 pl-2 pr-8 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+          >
+            {perPageOptions.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>
+            {totalItems > 0 ? `${(currentPage - 1) * perPage + 1} - ${Math.min(currentPage * perPage, totalItems)} sur ${totalItems}` : '0 élément'}
+          </span>
+        </div>
+        
+        <div className="flex gap-1">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className={`p-2 rounded-md ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
+          >
+            <ChevronLeftIcon className="h-5 w-5" />
+          </button>
+          
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (currentPage <= 3) {
+              pageNum = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+
+            return (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                className={`w-10 h-10 rounded-md text-sm font-medium ${currentPage === pageNum ? 'bg-indigo-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+          
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className={`p-2 rounded-md ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100'}`}
+          >
+            <ChevronRightIcon className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -333,15 +565,16 @@ export default function WebsiteBackup() {
                               Télécharger
                             </button>
                             <button
-                              onClick={() => restoreBackup(backup.id)}
+                              onClick={() => restoreBackup(backup)}
                               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                             >
                               Restaurer
                             </button>
                             <button
-                              onClick={() => deleteBackup(backup.id)}
+                              onClick={() => openDeleteModal(backup)}
                               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                             >
+                              <TrashIcon className="mr-1 h-4 w-4" />
                               Supprimer
                             </button>
                           </div>
@@ -350,6 +583,7 @@ export default function WebsiteBackup() {
                     ))}
                   </tbody>
                 </table>
+                {backups.length > 0 && <Pagination />}
               </div>
             )}
           </div>
@@ -628,112 +862,24 @@ export default function WebsiteBackup() {
       </WebSitePage>
       
       {/* Confirmation Modal */}
-      <Modal isOpen={isConfirmModalOpen} onClose={closeConfirmModal}>
-        <div className="p-6">
-          <div>
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-              <CheckCircleIcon className="h-6 w-6 text-green-600" aria-hidden="true" />
-            </div>
-            <div className="mt-3 text-center">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                Confirmer les paramètres de sauvegarde
-              </h3>
-              <div className="mt-2">
-                <p className="text-sm text-gray-500">
-                  Êtes-vous sûr de vouloir enregistrer ces paramètres de sauvegarde ? 
-                </p>
-                <div className="mt-4 bg-gray-50 p-4 rounded-md">
-                  <h4 className="text-sm font-medium text-gray-900">Résumé des paramètres</h4>
-                  <ul className="mt-2 text-sm text-gray-500 space-y-2">
-                    <li className="flex items-start">
-                      <span className="font-medium mr-2">Fréquence:</span>
-                      <span>
-                        {backupFrequency === 'hourly' ? 'Toutes les heures' : 
-                         backupFrequency === 'daily' ? 'Tous les jours' : 
-                         backupFrequency === 'weekly' ? 'Toutes les semaines' : 
-                         backupFrequency === 'monthly' ? 'Tous les mois' : 
-                         backupFrequency === 'none' ? 'Désactivée' : 'Non définie'}
-                      </span>
-                    </li>
-                    {backupFrequency && backupFrequency !== 'none' && (
-                      <li className="flex items-start">
-                        <span className="font-medium mr-2">Heure:</span>
-                        <span>{backupTime}</span>
-                      </li>
-                    )}
-                    {backupFrequency === 'weekly' && (
-                      <li className="flex items-start">
-                        <span className="font-medium mr-2">Jour:</span>
-                        <span>
-                          {dayOfWeek === '0' ? 'Dimanche' :
-                           dayOfWeek === '1' ? 'Lundi' :
-                           dayOfWeek === '2' ? 'Mardi' :
-                           dayOfWeek === '3' ? 'Mercredi' :
-                           dayOfWeek === '4' ? 'Jeudi' :
-                           dayOfWeek === '5' ? 'Vendredi' : 'Samedi'}
-                        </span>
-                      </li>
-                    )}
-                    {backupFrequency === 'monthly' && (
-                      <li className="flex items-start">
-                        <span className="font-medium mr-2">Jour du mois:</span>
-                        <span>{dayOfMonth}</span>
-                      </li>
-                    )}
-                    <li className="flex items-start">
-                      <span className="font-medium mr-2">Rétention:</span>
-                      <span>{retentionPeriod} jours</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="font-medium mr-2">Maximum:</span>
-                      <span>{maxBackups} sauvegardes</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="font-medium mr-2">Contenu:</span>
-                      <span>
-                        {includeDatabase && includeFiles ? 'Base de données et fichiers' : 
-                         includeDatabase ? 'Base de données uniquement' : 
-                         includeFiles ? 'Fichiers uniquement' : 'Aucun contenu sélectionné'}
-                      </span>
-                    </li>
-                    {notifyOnFailure && (
-                      <li className="flex items-start">
-                        <span className="font-medium mr-2">Notification:</span>
-                        <span>{notifyEmail}</span>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-            <button
-              type="button"
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:col-start-2 sm:text-sm"
-              onClick={saveBackupSettings}
-              disabled={savingSettings}
-            >
-              {savingSettings ? (
-                <>
-                  <ArrowPathIcon className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" />
-                  Enregistrement...
-                </>
-              ) : (
-                'Confirmer'
-              )}
-            </button>
-            <button
-              type="button"
-              className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:col-start-1 sm:text-sm"
-              onClick={closeConfirmModal}
-              disabled={savingSettings}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      </Modal>
+      <BackupSettingsConfirmModal
+        isOpen={isConfirmModalOpen}
+        onClose={closeConfirmModal}
+        onConfirm={saveBackupSettings}
+        isLoading={savingSettings}
+        settings={{
+          backupFrequency,
+          backupTime,
+          dayOfWeek,
+          dayOfMonth,
+          retentionPeriod,
+          maxBackups,
+          includeDatabase,
+          includeFiles,
+          notifyOnFailure,
+          notifyEmail
+        }}
+      />
       
       {/* Backup Note Modal */}
       <BackupNoteModal 
@@ -741,6 +887,33 @@ export default function WebsiteBackup() {
         onClose={closeBackupNoteModal}
         onConfirm={createBackup}
         isLoading={creatingBackup}
+      />
+      
+      {/* Delete Confirmation Modal */}
+      <DeleteBackupModal
+        isOpen={isDeleteModalOpen}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDeleteBackup}
+        backup={backupToDelete}
+        isLoading={deletingBackup}
+      />
+      
+      {/* Restore Backup Modal */}
+      <RestoreBackupModal
+        isOpen={isRestoreModalOpen}
+        onClose={closeRestoreModal}
+        backup={backupToRestore}
+        domains={domains}
+        subscriptions={userSubscriptions}
+        websiteId={id}
+        onSuccess={handleRestoreSuccess}
+      />
+      
+      {/* Restore Success Modal */}
+      <RestoreSuccessModal
+        isOpen={isRestoreSuccessModalOpen}
+        onClose={() => setIsRestoreSuccessModalOpen(false)}
+        restoredSite={restoredSite}
       />
     </Layout>
   );

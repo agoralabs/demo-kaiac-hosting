@@ -17,6 +17,8 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const { uploadToS3Content, uploadToS3JsonObject } = require('../services/fileUpload');
 const AWS = require('aws-sdk');
+const { S3Client, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -89,6 +91,10 @@ function domainToUnderscoreFormat(domain) {
 
 function truncateToLength(str, maxLength) {
   return str.length > maxLength ? str.substring(0, maxLength) : str;
+}
+
+function sftpTruncate(str) {
+  return truncateToLength(str,20);
 }
 
 // Deploy Wordpress Website OpenLiteSpeed,
@@ -186,7 +192,7 @@ router.post('/deploy-wordpress', auth, upload.fields([
     const wp_version = wordpress_version || process.env.WP_DEFAULT_VERSION;
     const wp_zip_location = wordpressZipUrl;
     const wp_db_dump_location = databaseDumpUrl;
-    const ftp_user = truncateToLength(`${domain_folder}_ftp`, 19);
+    const ftp_user = sftpTruncate(`${domain_folder}_ftp`);
     const ftp_pwd = process.env.WP_DEFAULT_FTP_PWD;
     const ftp_host = process.env.WP_DEFAULT_FTP_HOST;
     const ftp_port = process.env.WP_DEFAULT_FTP_PORT;
@@ -933,7 +939,7 @@ router.post('/duplicate/:id', auth, async (req, res) => {
     const wp_source_domain_folder = siteFromDb.domain_folder;
     const wp_source_db_name = siteFromDb.wp_db_name;
     const environment = target_environment;
-    const ftp_user = truncateToLength(`${domain_folder}_ftp`, 19);
+    const ftp_user = sftpTruncate(`${domain_folder}_ftp`);
     const ftp_pwd = process.env.WP_DEFAULT_FTP_PWD;
     const ftp_host = process.env.WP_DEFAULT_FTP_HOST;
     const ftp_port = process.env.WP_DEFAULT_FTP_PORT;
@@ -1230,6 +1236,18 @@ router.get('/:id/backups', auth, async (req, res) => {
       return res.status(404).json({ error: 'Website not found' });
     }
 
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.per_page) || 10;
+    const offset = (page - 1) * perPage;
+
+
+    const { count, rows } = await Backup.findAndCountAll({
+      where: { website_id: websiteId },
+      limit: perPage,
+      offset: offset,
+      order: [['created_at', 'DESC']]
+    });
+
     const backups = await Backup.findAll({
       where: {
         website_id: websiteId
@@ -1239,7 +1257,13 @@ router.get('/:id/backups', auth, async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Backups retrieved successfully',
-      data: backups
+      data: rows,
+      meta: {
+        total: count,
+        per_page: perPage,
+        current_page: page,
+        last_page: Math.ceil(count / perPage)
+      }
     });
 
   } catch (error) {
@@ -1262,27 +1286,59 @@ router.post('/:id/backup-settings', auth, async (req, res) => {
 
     const backupSettings = req.body;
     
-
-    // save backup settings to db
-    const backup_settings = await BackupSettings.create({
-      website_id: websiteId,
-      frequency: backupSettings.frequency,
-      retention_period: backupSettings.retentionPeriod,
-      max_backups: backupSettings.maxBackups,
-      include_database: backupSettings.includeDatabase,
-      include_files: backupSettings.includeFiles,
-      backup_time: backupSettings.backupTime,
-      day_of_week: backupSettings.dayOfWeek,
-      day_of_month: backupSettings.dayOfMonth,
-      notify_on_failure: backupSettings.notifyOnFailure,
-      notify_email: backupSettings.notifyEmail
+    // update backup settings if already exist
+    const existingBackupSettings = await BackupSettings.findOne({
+      where: {
+        website_id: websiteId
+      }
     });
 
-    res.status(200).json({
-      success: true,
-      message: 'Backup settings updated successfully',
-      data: backup_settings
-    });
+    if (existingBackupSettings) {
+      // Update existing backup settings
+      const updatedBackupSettings = await existingBackupSettings.update({
+        frequency: backupSettings.frequency,
+        retention_period: backupSettings.retentionPeriod,
+        max_backups: backupSettings.maxBackups,
+        include_database: backupSettings.includeDatabase,
+        include_files: backupSettings.includeFiles,
+        backup_time: backupSettings.backupTime,
+        day_of_week: backupSettings.dayOfWeek,
+        day_of_month: backupSettings.dayOfMonth,
+        notify_on_failure: backupSettings.notifyOnFailure,
+        notify_email: backupSettings.notifyEmail
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Backup settings updated successfully',
+        data: updatedBackupSettings
+      });
+
+    } else{
+
+      // save backup settings to db
+      const backup_settings = await BackupSettings.create({
+        website_id: websiteId,
+        frequency: backupSettings.frequency,
+        retention_period: backupSettings.retentionPeriod,
+        max_backups: backupSettings.maxBackups,
+        include_database: backupSettings.includeDatabase,
+        include_files: backupSettings.includeFiles,
+        backup_time: backupSettings.backupTime,
+        day_of_week: backupSettings.dayOfWeek,
+        day_of_month: backupSettings.dayOfMonth,
+        notify_on_failure: backupSettings.notifyOnFailure,
+        notify_email: backupSettings.notifyEmail
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Backup settings created successfully',
+        data: backup_settings
+      });
+    }
+    
+
 
   } catch (error) {
     logger.error(error);
@@ -1418,6 +1474,259 @@ router.post('/:id/backups-manual', auth, async (req, res) => {
   } catch (error) {
     logger.error(error);
     logger.error('Error creating backup:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// get /:id/backups/:idbackup/download
+router.get('/:id/backups/:idbackup/download', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId);
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const backupId = req.params.idbackup;
+    const backup = await Backup.findByPk(backupId);
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: backup.location.split('s3://')[1].split('/').slice(1).join('/')
+    });
+
+    const response = await s3.send(command);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename=${backup.name}.zip`);
+    response.Body.pipe(res);
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error downloading backup:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// delete /:id/backups/:idbackup
+router.delete('/:id/backups/:idbackup', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId);
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const backupId = req.params.idbackup;
+    const backup = await Backup.findByPk(backupId);
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    
+    // supprimer aussi dans s3 l'objet backup.location
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: backup.location.split('s3://')[1].split('/').slice(1).join('/')
+    });
+
+    await s3.send(command);
+
+    await backup.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Backup deleted successfully',
+      data: backup
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error deleting backup:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// post /:id/backups/:idbackup/restore
+router.post('/:id/backups/:idbackup/restore', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain,
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const backupId = req.params.idbackup;
+    const backup = await Backup.findByPk(backupId);
+
+    if (!backup) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    const userId = req.user.id;
+
+    const {
+      name,
+      environment,
+      subdomain, 
+      domain_id, 
+      subscription_id } = req.body;
+
+    const existingDomain = await Domain.findOne({
+      where: { id: domain_id }
+    });
+
+    // Vérification des doublons de domaine
+    const existingWebsite = await Website.findOne({
+      where: { 
+        record : subdomain
+       },
+      include: [{
+        model: Domain,
+        where: { domain_name: existingDomain.domain_name }
+      }]
+    });
+
+    if (existingWebsite) {
+        return res.status(409).json({
+          success: false,
+          message: 'Domain already exists for this subscription'
+        });
+    }
+
+    // Deployment du site
+    const record = subdomain;
+    const siteDomain = `${subdomain}.${existingDomain.domain_name}`;
+    const domain = existingDomain.domain_name;
+    const domain_folder = domainToUnderscoreFormat(siteDomain);
+    const wp_db_name = `${domain_folder}_db`;
+    const wp_db_user = `${wp_db_name}_usr`;
+    const wp_db_password = process.env.WP_DEFAULT_DB_USER_PWD;
+    const php_version = website.php_version;
+    const wp_version = website.wp_version;
+    const ftp_user = sftpTruncate(`${domain_folder}_ftp`);
+    const ftp_pwd = process.env.WP_DEFAULT_FTP_PWD;
+    const ftp_host = process.env.WP_DEFAULT_FTP_HOST;
+    const ftp_port = process.env.WP_DEFAULT_FTP_PORT;
+    const installation_method = 'restore';
+    const backup_location = backup.location;
+    const wp_source_domain = `${website.record}.${website.Domain.domain_name}`;
+    const backup_type = backup.type;
+    
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record,
+      domain,
+      domain_folder,
+      wp_db_name,
+      wp_db_user,
+      wp_db_password,
+      php_version,
+      wp_version,
+      environment,
+      ftp_user,
+      ftp_pwd,
+      ftp_host,
+      ftp_port,
+      installation_method,
+      wp_source_domain,
+      backup_location,
+      backup_type,
+      command: 'CREATE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    // Création du site
+    const newWebsite = await Website.create({
+      name : name,
+      environment: environment,
+      record: record,
+      domain_id: domain_id,
+      is_active: true,
+      subscription_id: subscription_id,
+      user_id: userId,
+      domain_folder: domain_folder,
+      wp_db_name: wp_db_name,
+      wp_db_user: wp_db_user,
+      wp_db_password: wp_db_password,
+      php_version: php_version,
+      wp_version: wp_version,
+      is_processing_site: true,
+      installation_method: installation_method,
+      wp_zip_location: backup_location,
+      wp_source_domain: wp_source_domain,
+      ftp_user: ftp_user,
+      ftp_pwd: ftp_pwd,
+      ftp_host: ftp_host,
+      ftp_port: ftp_port,
+      last_deployed_at: new Date().toISOString()
+    });
+
+
+    const newWebsiteFromDb = await Website.findByPk(newWebsite.id, {
+      include: [{
+        model: Domain
+      },
+      {
+        model: Subscription,
+        include: [{
+          model: Plan,
+          attributes: ['name']
+        }]
+      }]
+    });
+
+
+    res.status(200).json({
+      success: true,
+      message: 'Restore created successfully',
+      data: newWebsiteFromDb
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error creating restore:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

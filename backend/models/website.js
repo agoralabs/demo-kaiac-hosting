@@ -125,7 +125,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     installation_method: {
-      type: DataTypes.ENUM('standard', 'git', 'zip_and_sql', 'copy', 'push', 'maintenance', 'cache'),
+      type: DataTypes.ENUM('standard', 'git', 'zip_and_sql', 'copy', 'push', 'maintenance', 'cache', 'restore'),
       allowNull: false,
       defaultValue: 'standard'
     },

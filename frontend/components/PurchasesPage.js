@@ -17,7 +17,7 @@ export default function PurchasesPage({ children, title = '' }) {
 
   const menuItems = [
     { name: 'Tableau de bord', path: '/purchases', icon: HomeIcon },
-    { name: 'Mes plans', path: '/purchases/hosting', icon: ServerStackIcon },
+    { name: 'Mes hébergements', path: '/purchases/hosting', icon: ServerStackIcon },
     { name: 'Mes sites WordPress', path: '/purchases/websites', icon: GlobeAltIcon },
     { name: 'Mes domaines', path: '/purchases/domains', icon: LinkIcon },
     { name: 'Mes adresses e-mails', path: '/purchases/emails', icon: EnvelopeIcon },

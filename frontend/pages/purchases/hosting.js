@@ -1,12 +1,13 @@
 import Layout from '../../components/Layout';
 import PurchasesPage from '../../components/PurchasesPage';
-import HostingTable from '../../components/hosting/HostingTable';
+import HostingList from '../../components/hosting/HostingList';
 
 export default function Hosting() {
+
   return (
-    <Layout title="Mes Hébergements de sites WordPress">
+    <Layout title="Mes formules souscrites">
       <PurchasesPage>
-        <HostingTable />
+        <HostingList />
       </PurchasesPage>
     </Layout>
   );
