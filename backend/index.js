@@ -51,8 +51,14 @@ function validateDBConfig() {
   }
 }
 
+
 // Initialize Express app
 const app = express();
+
+// Stripe webhook en premier et avec raw
+const stripeWebhook = require('./routes/stripe-webhook');
+app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
 
 // Middleware
 app.use(cors());
@@ -60,6 +66,15 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/plans', require('./routes/plans'));
+app.use('/api/user', require('./routes/user'));
+app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/website', require('./routes/website'));
+app.use('/api/invoice', require('./routes/invoice'));
+app.use('/api/payment', require('./routes/payment'));
+app.use('/api/domains', require('./routes/domains'));
 
 async function connectWithRetry(attempt = 1) {
   try {

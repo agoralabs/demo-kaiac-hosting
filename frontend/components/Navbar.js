@@ -13,7 +13,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              <span className="font-semibold text-xl text-gray-800">WordPress Hosting</span>
+              <span className="font-semibold text-xl text-gray-800">KaPress</span>
             </Link>
           </div>
           <div className="hidden md:flex items-center space-x-4">
@@ -26,23 +26,41 @@ export default function Navbar() {
               Accueil
             </Link>
             {isLoggedIn && (
-              <Link 
-                href="/dashboard"
-                className={`px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition duration-150 ease-in-out ${
-                  router.pathname === "/dashboard" ? "bg-gray-50 text-gray-900" : ""
-                }`}
-              >
-                Tableau de bord
-              </Link>
+              <>
+                <Link 
+                  href="/shop"
+                  className={`px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition duration-150 ease-in-out ${
+                    router.pathname === "/shop" ? "bg-gray-50 text-gray-900" : ""
+                  }`}
+                >
+                  Boutique
+                </Link>
+              </>
             )}
-            <Link 
-              href="/plans"
-              className={`px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition duration-150 ease-in-out ${
-                router.pathname === "/plans" ? "bg-gray-50 text-gray-900" : ""
-              }`}
-            >
-              Plans
-            </Link>
+          {isLoggedIn && (
+              <>
+                <Link 
+                  href="/purchases"
+                  className={`px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition duration-150 ease-in-out ${
+                    router.pathname === "/purchases" ? "bg-gray-50 text-gray-900" : ""
+                  }`}
+                >
+                  Achats
+                </Link>
+              </>
+            )}
+          {isLoggedIn && (
+              <>
+                <Link 
+                  href="/profile"
+                  className={`px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition duration-150 ease-in-out ${
+                    router.pathname === "/profile" ? "bg-gray-50 text-gray-900" : ""
+                  }`}
+                >
+                  Profil
+                </Link>
+              </>
+            )}
             <div className="flex items-center space-x-3">
               {isLoggedIn ? (
                 <button

@@ -33,7 +33,7 @@ export default function Login() {
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem('token', data.token);
-        router.push('/plans');
+        window.location.href = '/shop/hosting';
       } else {
         setError('Identifiants invalides');
       }

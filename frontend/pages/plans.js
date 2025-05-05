@@ -24,26 +24,23 @@ export default function Plans() {
 
   const plans = [
     {
-      name: 'Basic Plan',
+      id: '1',
+      name: 'BASIC',
       price: '9.99',
-      features: ['Feature 1', 'Feature 2', 'Feature 3'],
+      features: ['1 WordPress Site', '10GB Storage', 'Basic Support']
     },
     {
-      name: 'Pro Plan',
+      id: '2',
+      name: 'STANDARD',
       price: '19.99',
-      features: ['All Basic Features', 'Feature 4', 'Feature 5', 'Feature 6'],
+      features: ['3 WordPress Sites', '30GB Storage', 'Priority Support']
     },
     {
-      name: 'Enterprise Plan',
-      price: '29.99',
-      features: [
-        'All Pro Features',
-        'Feature 7',
-        'Feature 8',
-        'Feature 9',
-        'Priority Support',
-      ],
-    },
+      id: '3',
+      name: 'PREMIUM',
+      price: '39.99',
+      features: ['10 WordPress Sites', '100GB Storage', '24/7 Premium Support']
+    }
   ];
 
   const handleSubscription = async (planId) => {
@@ -51,11 +48,13 @@ export default function Plans() {
       setLoading(true);
       setError(null);
       
-      const response = await api.post('/api/subscriptions', { planId });
+      //const response = await api.post('/api/subscriptions', { planId });
+      const { data: order } = await api.post('/api/orders', { planId });
+
       const stripe = await stripePromise;
       
       const { error } = await stripe.redirectToCheckout({
-        sessionId: response.data.sessionId,
+        sessionId: order.sessionId
       });
       
       if (error) {

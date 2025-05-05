@@ -56,3 +56,20 @@ npm run verify
   - Mac/Linux: `redis-cli ping` (should return PONG)
 - Start Redis if needed:
   - Mac/Linux: `sudo service redis-server start`
+
+### Allow remote access redis
+
+Écouter sur toutes les interfaces réseau (par défaut, Redis n'écoute que sur 127.0.0.1)
+
+Ouvrez le fichier redis.conf (généralement situé dans /  ou /etc/redis.conf).
+
+> bind 0.0.0.0
+
+Désactiver le mode protégé (pour autoriser les connexions distantes)
+
+> protected-mode no
+
+
+Restart redis
+
+> sudo systemctl restart redis-server  # Sur systemd (Ubuntu/Debian/CentOS)
