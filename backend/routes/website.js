@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { Domain, Website, Subscription, Plan, Backup, BackupSettings } = require('../models');
+const { Domain, Website, Subscription, Plan, Backup, BackupSettings, RedirectRule } = require('../models');
 const auth = require('../middleware/auth');
 const logger = require('../utils/logger');
 const db = require('../models');
@@ -18,12 +18,15 @@ const upload = multer({ storage: multer.memoryStorage() });
 const { uploadToS3Content, uploadToS3JsonObject } = require('../services/fileUpload');
 const AWS = require('aws-sdk');
 const { S3Client, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { SSMClient, GetParameterCommand, PutParameterCommand } = require("@aws-sdk/client-ssm");
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION
 });
+
+const ssmClient = new SSMClient({ region: process.env.AWS_REGION });
 
 dotenv.config();
 
@@ -218,7 +221,7 @@ router.post('/deploy-wordpress', auth, upload.fields([
       environment,
       ftp_user,
       ftp_pwd,
-      command: 'CREATE_WP', // Déployer wordpress
+      command: 'MANAGE_WP', // Déployer wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -439,19 +442,21 @@ router.delete('/delete-wordpress/:id', auth, async (req, res) => {
     const php_version = website.php_version;
     const wp_version = website.wp_version;
     const ftp_user = website.ftp_user;
+    const installation_method = "delete";
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       userId,
       record,
       domain,
       domain_folder,
+      installation_method,
       wp_db_name,
       wp_db_user,
       wp_db_password,
       php_version,
       wp_version,
       ftp_user,
-      command: 'DELETE_WP', // Supprimer le site wordpress
+      command: 'MANAGE_WP', // Supprimer le site wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -962,7 +967,7 @@ router.post('/duplicate/:id', auth, async (req, res) => {
       environment,
       ftp_user,
       ftp_pwd,
-      command: 'CREATE_WP', // Déployer wordpress
+      command: 'MANAGE_WP', // Déployer wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1098,7 +1103,7 @@ router.post('/push-env', auth, async (req, res) => {
       wp_source_db_name: sourceWebsite.wp_db_name,
       environment: targetWebsite.environment,
       wp_push_location: pushInfosS3.s3_location,
-      command: 'CREATE_WP', // Deploy wordpress
+      command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1134,21 +1139,29 @@ router.post('/push-env', auth, async (req, res) => {
 router.put('/:id/toggle-maintenance', auth, async (req, res) => {
   try {
     const websiteId = req.params.id;
-    const website = await Website.findByPk(websiteId);
+    const website = await Website.findByPk(websiteId, {
+      include: [{
+        model: Domain
+      }]
+    });
 
     if (!website) {
       return res.status(404).json({ error: 'Website not found' });
     }
 
     const is_maintenance_mode_enabled = req.body;
-    const maintenance_mode = is_maintenance_mode_enabled ? 'on' : 'off';
+    const toggle_maintenance_mode = is_maintenance_mode_enabled ? 'on' : 'off';
     const userId = req.user.id;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       installation_method: 'maintenance',
+      userId: userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
       domain_folder: website.domain_folder,
-      maintenance_mode: maintenance_mode,
-      command: 'CREATE_WP', // Deploy wordpress
+      toggle_maintenance_mode: toggle_maintenance_mode,
+      wp_db_name: website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1182,21 +1195,29 @@ router.put('/:id/toggle-maintenance', auth, async (req, res) => {
 router.put('/:id/toggle-lscache', auth, async (req, res) => {
   try {
     const websiteId = req.params.id;
-    const website = await Website.findByPk(websiteId);
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
 
     if (!website) {
       return res.status(404).json({ error: 'Website not found' });
     }
 
     const is_lscache_enabled = req.body;
-    const lscache = is_lscache_enabled ? 'on' : 'off';
+    const toggle_lscache = is_lscache_enabled ? 'on' : 'off';
     const userId = req.user.id;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       installation_method: 'cache',
+      userId: userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
       domain_folder: website.domain_folder,
-      lscache: lscache,
-      command: 'CREATE_WP', // Deploy wordpress
+      toggle_lscache: toggle_lscache,
+      wp_db_name: website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1408,7 +1429,11 @@ function getBackupFileName(website) {
 router.post('/:id/backups-manual', auth, async (req, res) => {
   try {
     const websiteId = req.params.id;
-    const website = await Website.findByPk(websiteId);
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain,
+      }]
+    });
 
     if (!website) {
       return res.status(404).json({ error: 'Website not found' });
@@ -1445,13 +1470,15 @@ router.post('/:id/backups-manual', auth, async (req, res) => {
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       installation_method: 'backup',
+      record: website.record,
+      domain: website.Domain.domain_name,
       domain_folder: website.domain_folder,
       backup_location: backupLocation,
       backup_type: backupType,
       wp_db_name: website.wp_db_name,
       wp_db_user: website.wp_db_user,
       wp_db_password: website.wp_db_password,
-      command: 'CREATE_WP', // Deploy wordpress
+      command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1663,7 +1690,7 @@ router.post('/:id/backups/:idbackup/restore', auth, async (req, res) => {
       wp_source_domain,
       backup_location,
       backup_type,
-      command: 'CREATE_WP', // Deploy wordpress
+      command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
 
@@ -1727,6 +1754,329 @@ router.post('/:id/backups/:idbackup/restore', auth, async (req, res) => {
   } catch (error) {
     logger.error(error);
     logger.error('Error creating restore:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// get all /redirects/${id}
+router.get('/redirects/:id', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId);
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const redirects = await RedirectRule.findAll({
+      where: {
+        website_id: websiteId
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Redirects retrieved successfully',
+      data: redirects
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error retrieving redirects:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Récupérer les règles actuelles depuis Parameter Store
+async function getCurrentRules(parameterName) {
+  try {
+    const command = new GetParameterCommand({
+      Name: parameterName,
+    });
+    const response = await ssmClient.send(command);
+    return JSON.parse(response.Parameter.Value);
+  } catch (error) {
+    if (error.name === "ParameterNotFound") {
+      return { rules: [] }; // Initialise un JSON vide si le paramètre n'existe pas
+    }
+    throw error;
+  }
+}
+
+// Mettre à jour les règles dans Parameter Store
+async function updateRules(newRules, parameterName) {
+  const command = new PutParameterCommand({
+    Name: parameterName,
+    Value: JSON.stringify(newRules),
+    Type: "String",
+    Overwrite: true,
+  });
+
+  logger.info(`command=${JSON.stringify(newRules, null, 2)}`);
+
+  await ssmClient.send(command);
+  console.log("✅ Règles mises à jour avec succès !");
+}
+
+// Ajouter une nouvelle règle
+async function addRule(currentRules, newRule, parameterName) {
+  currentRules.rules.push(newRule);
+  await updateRules(currentRules, parameterName);
+}
+
+// 4. Modifier une règle existante (par ID)
+async function editRule(ruleId, currentRules, updatedRule, parameterName) {
+
+  if (!currentRules || !currentRules.rules) {
+    currentRules = { rules: [] };
+  }
+
+  const updatedRules = {
+    rules: currentRules.rules.map(rule => {
+
+      if (rule.id.toString() === ruleId.toString()) {
+        logger.info(`rule=${JSON.stringify(rule, null, 2)}`);
+        rule.priority = parseInt(updatedRule.priority);
+        rule.rewrite_rule = updatedRule.rewrite_rule;
+        rule.status_code = updatedRule.status_code;
+        rule.source = updatedRule.source;
+        rule.destination = updatedRule.destination;
+        rule.condition = updatedRule.condition;
+        rule.is_active = updatedRule.is_active;
+        rule.type = updatedRule.type;
+        rule.name = updatedRule.name;
+        return rule;
+      }
+
+      return rule;
+    })
+  };
+
+  logger.info(`updatedRules=${JSON.stringify(updatedRules, null, 2)}`);
+  
+  // if (!updatedRules.rules.some(rule => rule.id === ruleId)) {
+  //   throw new Error("Règle non trouvée !");
+  // }
+
+  await updateRules(updatedRules, parameterName);
+}
+
+// post /${id}/redirects 
+router.post('/:id/redirects', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const userId = req.user.id;
+    const { name, type, source, destination, condition, status_code, rewrite_rule, priority, is_active } = req.body;
+
+    const domain_folder = website.domain_folder;
+    const installation_method = 'redirect';
+
+    const redirectRule = await RedirectRule.create({
+      website_id: websiteId,
+      name: name,
+      type: type,
+      condition: condition,
+      rewrite_rule: rewrite_rule,
+      priority: priority,
+      is_active: is_active,
+      source: source,
+      destination: destination,
+      status_code: status_code
+    });
+
+    const parameterName = `/wordpress/${domain_folder}/redirects`;
+    await addRule(redirectRule, parameterName);
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);    
+
+    res.status(200).json({
+      success: true,
+      message: 'Redirect created successfully',
+      data: redirectRule
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error creating redirect:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// delete /${id}/redirects/${idredirect}
+router.delete('/:id/redirects/:idredirect', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const redirectId = req.params.idredirect;
+    const redirect = await RedirectRule.findByPk(redirectId);
+
+    if (!redirect) {
+      return res.status(404).json({ error: 'Redirect not found' });
+    }
+
+    await redirect.destroy();
+
+    const domain_folder = website.domain_folder;
+    const installation_method = 'redirect';
+
+    const parameterName = `/wordpress/${domain_folder}/redirects`;
+    const currentRules = await getCurrentRules(parameterName);
+    
+    const updatedRules = [];
+    for (const rule of currentRules.rules) {
+      if (parseInt(rule.id) !== parseInt(redirectId)) {
+        updatedRules.push(rule);
+      }
+    }
+
+    await updateRules({ rules: updatedRules }, parameterName);
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    res.status(200).json({
+      success: true,
+      message: 'Redirect deleted successfully',
+      data: redirect
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error deleting redirect:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// put /${id}/redirects/${idredirect} update priority
+router.put('/:id/redirects/:idredirect', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const redirectId = req.params.idredirect;
+    const redirect = await RedirectRule.findByPk(redirectId);
+
+    if (!redirect) {
+      return res.status(404).json({ error: 'Redirect not found' });
+    }
+
+    const updatedRedirect = req.body;
+    const priority = updatedRedirect.priority;
+
+    await redirect.update({
+      priority: priority
+    });
+
+    const redirectFromDb = await RedirectRule.findByPk(redirectId);
+
+    const domain_folder = website.domain_folder;
+    const installation_method = 'redirect';
+
+    const parameterName = `/wordpress/${domain_folder}/redirects`;
+
+    logger.info(`redirectFromDb=${redirectFromDb}`);
+    const currentRules = await getCurrentRules(parameterName);
+    logger.info(`currentRules=${currentRules}`);
+
+    await editRule(redirectId, currentRules, redirectFromDb, parameterName);
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    res.status(200).json({
+      success: true,
+      message: 'Redirect updated successfully',
+      data: redirectFromDb
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error updating redirect:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
