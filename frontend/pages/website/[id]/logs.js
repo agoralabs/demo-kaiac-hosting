@@ -51,8 +51,8 @@ export default function Logs() {
         setWebsite(websiteFromDb);
         
         // Check if WordPress debug is enabled
-        if (websiteFromDb.wp_debug_enabled !== undefined) {
-          setWpDebugEnabled(websiteFromDb.wp_debug_enabled);
+        if (websiteFromDb.is_wp_debug_enabled !== undefined) {
+          setWpDebugEnabled(websiteFromDb.is_wp_debug_enabled);
         }
       } catch (err) {
         console.error('Failed to load website information', err);
@@ -76,6 +76,9 @@ export default function Logs() {
     }));
     
     try {
+      // Les paramètres lines et filter sont envoyés comme query parameters dans l'URL
+      // Exemple: /api/website/123/logs/access?lines=100&filter=error
+      // axios (api) convertit automatiquement l'objet params en query string
       const response = await api.get(`/api/website/${id}/logs/${logType}`, {
         params: { lines: logLines, filter: filterText }
       });
@@ -83,7 +86,7 @@ export default function Logs() {
       setLogs(prev => ({
         ...prev,
         [logType]: { 
-          content: response.data.content || 'Aucun log disponible', 
+          content: response.data.data || 'Aucun log disponible', 
           loading: false, 
           error: null 
         }
@@ -108,7 +111,7 @@ export default function Logs() {
     
     setUpdatingDebugSetting(true);
     try {
-      const response = await api.put(`/api/website/${id}/wp-debug`, {
+      const response = await api.put(`/api/website/${id}/toggle-wp-debug`, {
         enabled: !wpDebugEnabled
       });
       
@@ -134,7 +137,8 @@ export default function Logs() {
     
     try {
       const response = await api.get(`/api/website/${id}/logs/${logType}/download`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        params: { lines: logLines, filter: filterText }
       });
       
       // Create a download link
@@ -202,7 +206,7 @@ export default function Logs() {
         <div className="px-4 py-5 sm:px-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
             <DocumentTextIcon className="h-5 w-5 mr-2 text-indigo-500" />
-            Logs du site
+            Logs du site {website?.name || 'Website'} - {website?.environment || ''}
           </h3>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
             Consultez les logs d'accès, d'erreurs et de debug de votre site WordPress.
@@ -354,9 +358,39 @@ export default function Logs() {
                   <span className="ml-2 text-gray-600">{logs[activeTab].error}</span>
                 </div>
               ) : (
-                <pre className="p-4 overflow-x-auto text-xs font-mono bg-gray-50 h-[500px] overflow-y-auto">
-                  {logs[activeTab].content || 'Aucun log disponible'}
-                </pre>
+                <div className="p-4 overflow-x-auto text-xs font-mono bg-gray-50 h-[500px] overflow-y-auto">
+                  {logs[activeTab].content ? (
+                    <table className="w-full">
+                      <tbody>
+                        {Array.isArray(logs[activeTab].content) ? (
+                          logs[activeTab].content.map((line, index) => (
+                            <tr key={index} className="hover:bg-gray-100">
+                              <td className="text-right pr-3 select-none text-gray-400 border-r border-gray-200 w-12">
+                                {index + 1}
+                              </td>
+                              <td className="pl-3 whitespace-pre overflow-x-auto">
+                                {line || ' '}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          logs[activeTab].content.split('\n').map((line, index) => (
+                            <tr key={index} className="hover:bg-gray-100">
+                              <td className="text-right pr-3 select-none text-gray-400 border-r border-gray-200 w-12">
+                                {index + 1}
+                              </td>
+                              <td className="pl-3 whitespace-pre overflow-x-auto">
+                                {line || ' '}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-gray-500">Aucun log disponible</p>
+                  )}
+                </div>
               )}
             </div>
           </div>

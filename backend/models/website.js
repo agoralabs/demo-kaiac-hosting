@@ -153,6 +153,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    is_wp_debug_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    is_wp_query_monitor_installed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    is_wp_query_monitor_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     subscription_id: {
         type: DataTypes.INTEGER,
         allowNull: false,

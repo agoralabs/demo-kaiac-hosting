@@ -18,7 +18,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 const { uploadToS3Content, uploadToS3JsonObject } = require('../services/fileUpload');
 const AWS = require('aws-sdk');
 const { S3Client, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
-const { SSMClient, GetParameterCommand, PutParameterCommand } = require("@aws-sdk/client-ssm");
+const { SSMClient, GetParameterCommand, PutParameterCommand, SendCommandCommand, GetCommandInvocationCommand } = require("@aws-sdk/client-ssm");
+const { EC2Client, DescribeInstancesCommand } = require("@aws-sdk/client-ec2");
+
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -31,6 +33,14 @@ const ssmClient = new SSMClient({ region: process.env.AWS_REGION });
 dotenv.config();
 
 const sqs = new SQSClient({ region: process.env.AWS_REGION }); 
+
+const ec2Client = new EC2Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 // get all websites
 router.get('/all', auth, async (req, res) => {
@@ -2077,6 +2087,399 @@ router.put('/:id/redirects/:idredirect', auth, async (req, res) => {
   } catch (error) {
     logger.error(error);
     logger.error('Error updating redirect:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+async function getEc2InstanceId(tagName, tagValue) {
+  try {
+
+
+    const command = new DescribeInstancesCommand({
+      Filters: [
+        {
+          Name: `tag:${tagName}`,
+          Values: [tagValue]
+        },
+        {
+          Name: 'instance-state-name',
+          Values: ['running']
+        }
+      ]
+    });
+
+    const response = await ec2Client.send(command);
+
+    if (!response.Reservations || response.Reservations.length === 0) {
+      throw new Error('No EC2 instances found');
+    }
+
+    const instance = response.Reservations[0].Instances[0];
+    return instance.InstanceId;
+
+  } catch (error) {
+    logger.error('Error getting EC2 instance ID:', error);
+    throw error;
+  }
+}
+
+// get /${id}/logs/${logType}
+router.get('/:id/logs/:logType', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const logType = req.params.logType;
+    const lines = req.query.lines || 100; // Valeur par défaut de 100 lignes
+    const filter = req.query.filter || ''; // Filtre vide par défaut  
+    const domain_folder = website.domain_folder;
+
+    const logFilePath = `/usr/local/lsws/logs/vhosts/${domain_folder}/${logType}.log`;
+
+
+    // Récupérer ec2_instance_id grâce à process.env.EC2_TAG_NAME et process.env.EC2_TAG_VALUE
+    const ec2_instance_id = await getEc2InstanceId(process.env.EC2_TAG_NAME, process.env.EC2_TAG_VALUE);
+
+    logger.info(`ec2_instance_id=${ec2_instance_id}`);
+
+    let cmd = `cat ${logFilePath}`;
+    if (filter) {
+      cmd = `grep -i "${filter}" ${logFilePath}`;
+    }
+    if (lines) {
+      cmd += ` | head -n ${lines}`;
+    }
+
+    logger.info(`cmd=${cmd}`);
+    // Commande pour lire le fichier de logs
+    const command = new SendCommandCommand({
+      InstanceIds: [ec2_instance_id], // ID de l'instance EC2
+      DocumentName: 'AWS-RunShellScript',
+      Comment: `Read log file ${logFilePath}`,
+      Parameters: {
+        commands: [cmd]
+      }
+    });
+
+    const response = await ssmClient.send(command);
+    
+    // Wait for command completion with timeout
+    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < timeout) {
+        const command = new GetCommandInvocationCommand({
+          CommandId: commandId,
+          InstanceId: instanceId
+        });
+    
+        const response = await ssmClient.send(command);
+    
+        if (response.Status === 'Success') {
+          return response.StandardOutputContent;
+        } else if (response.Status === 'Failed') {
+          throw new Error(`Command failed: ${response.StandardErrorContent}`);
+        }
+    
+        // Wait 1 second before checking again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    
+      throw new Error('Command timed out');
+    };
+    
+    const commandId = response.Command.CommandId;
+    logger.info(`commandId=${commandId}`);
+    
+    const output = await getCommandOutput(commandId, ec2_instance_id);
+    logger.info(`output=${output}`);
+
+    const logData = output.split('\n');
+    logger.info(`logData.length=${logData.length}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logs retrieved successfully',
+      data: logData
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error retrieving logs:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// put /${id}/toggle-wp-debug is_wp_debug_enabled
+router.put('/:id/toggle-wp-debug', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    //const enabled = req.body;
+    const toggle_wp_debug = !website.is_wp_debug_enabled ? 'on' : 'off';
+    const userId = req.user.id;
+    const domain_folder = website.domain_folder;
+    const installation_method = 'debug';
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      toggle_wp_debug,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    website.is_wp_debug_enabled = !website.is_wp_debug_enabled;
+    await website.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'WP debug updated successfully',
+      data: website
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error updating WP debug:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// get /${id}/logs/${logType}/download 
+
+router.get('/:id/logs/:logType/download', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId);
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const logType = req.params.logType;
+    const logFilename = `${logType}-${website.name}-${website.environment}.log`;
+
+    const lines = req.query.lines || 100; // Valeur par défaut de 100 lignes
+    const filter = req.query.filter || ''; // Filtre vide par défaut  
+    const domain_folder = website.domain_folder;
+
+    const logFilePath = `/usr/local/lsws/logs/vhosts/${domain_folder}/${logType}.log`;
+
+    // Récupérer ec2_instance_id grâce à process.env.EC2_TAG_NAME et process.env.EC2_TAG_VALUE
+    const ec2_instance_id = await getEc2InstanceId(process.env.EC2_TAG_NAME, process.env.EC2_TAG_VALUE);
+
+    logger.info(`ec2_instance_id=${ec2_instance_id}`);
+
+    let cmd = `cat ${logFilePath}`;
+    if (filter) {
+      cmd = `grep -i "${filter}" ${logFilePath}`;
+    }
+    if (lines) {
+      cmd += ` | head -n ${lines}`;
+    }
+
+    logger.info(`cmd=${cmd}`);
+    // Commande pour lire le fichier de logs
+    const command = new SendCommandCommand({
+      InstanceIds: [ec2_instance_id], // ID de l'instance EC2
+      DocumentName: 'AWS-RunShellScript',
+      Comment: `Read log file ${logFilePath} for download`,
+      Parameters: {
+        commands: [cmd]
+      }
+    });
+
+    const response = await ssmClient.send(command);
+    
+    // Wait for command completion with timeout
+    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < timeout) {
+        const command = new GetCommandInvocationCommand({
+          CommandId: commandId,
+          InstanceId: instanceId
+        });
+    
+        const response = await ssmClient.send(command);
+    
+        if (response.Status === 'Success') {
+          return response.StandardOutputContent;
+        } else if (response.Status === 'Failed') {
+          throw new Error(`Command failed: ${response.StandardErrorContent}`);
+        }
+    
+        // Wait 1 second before checking again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    
+      throw new Error('Command timed out');
+    };
+    
+    const commandId = response.Command.CommandId;
+    logger.info(`commandId=${commandId}`);
+    
+    const output = await getCommandOutput(commandId, ec2_instance_id);
+    logger.info(`output=${output}`);
+
+
+    // Set headers for text file download
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename=${logFilename}`);
+
+    // Send the text content directly
+    res.send(output);
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error downloading log file:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// post /${id}/plugins/install-query-monitor
+router.post('/:id/plugins/install-query-monitor', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const userId = req.user.id;
+    const domain_folder = website.domain_folder;
+    const installation_method = 'install_query_monitor';
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    website.is_wp_query_monitor_installed = true;
+    website.is_wp_query_monitor_enabled = true;
+    await website.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Plugin installation started successfully',
+      data: website
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error installing plugin:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// put /${id}/toggle-plugin-query-monitor
+router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const toggle_query_monitor = !website.is_wp_query_monitor_enabled ? 'on' : 'off';
+    const userId = req.user.id;
+    const domain_folder = website.domain_folder;
+    const installation_method = 'toggle_query_monitor';
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const messageBody = JSON.stringify({
+      userId,
+      record: website.record,
+      domain: website.Domain.domain_name,
+      domain_folder,
+      installation_method,
+      toggle_query_monitor,
+      wp_db_name : website.wp_db_name,
+      command: 'MANAGE_WP', // Deploy wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${websiteId}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
+
+    website.is_wp_query_monitor_enabled = !website.is_wp_query_monitor_enabled;
+    await website.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'WP debug updated successfully',
+      data: website
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error updating WP debug:', error.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
