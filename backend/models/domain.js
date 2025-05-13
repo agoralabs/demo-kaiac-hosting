@@ -72,7 +72,7 @@ module.exports = (sequelize) => {
     category: {
       type: DataTypes.ENUM('buyed', 'declared'),
       allowNull: false,
-      defaultValue: 'buyed'
+      defaultValue: 'declared'
     },
     expires_at: {
       type: DataTypes.DATE,
@@ -90,15 +90,13 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+    aws_access_key_id: {
+      type: DataTypes.STRING(100),
+      allowNull: true
     },
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
+    aws_secret_access_key: {
+      type: DataTypes.STRING(100),
+      allowNull: true
     }
   }, {
     tableName: 'domains',

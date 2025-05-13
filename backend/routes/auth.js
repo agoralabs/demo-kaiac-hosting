@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const User = db.User;
+const { User, AlertSettings } = require('../models');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
@@ -75,6 +75,8 @@ router.post('/signup', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
+
+    AlertSettings.applyDefaults(user.id);
 
     res.json({
       success: true,

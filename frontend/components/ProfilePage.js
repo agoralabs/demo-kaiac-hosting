@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import {
   UserIcon,
     InformationCircleIcon,
+    EnvelopeIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
 
@@ -10,8 +11,9 @@ export default function ProfilePage({ children, title = '' }) {
   const { user } = useAuth();
 
   const menuItems = [
-    { name: 'Informations', path: '/profile', icon: UserIcon },
-    { name: 'Activité du compte', path: '/profile/activity', icon: InformationCircleIcon }
+    { name: 'Informations du compte', path: '/profile', icon: UserIcon },
+    { name: 'Activité du compte', path: '/profile/activity', icon: InformationCircleIcon },
+    { name: 'Paramètres de notifications', path: '/profile/notifications', icon: EnvelopeIcon }
   ];
 
   return (

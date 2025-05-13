@@ -11,7 +11,9 @@ const {
   Domain, 
   Email,
   Payment,
-  Invoice } = require('../models');
+  Invoice,
+  AlertSettings
+} = require('../models');
 const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
 const logger = require('../utils/logger');
@@ -47,7 +49,7 @@ router.get('/profile', auth, async (req, res) => {
 router.put('/profile', auth, async (req, res) => {
   try {
 
-    const { firstname, lastname, email, currentPassword, newPassword } = req.body;
+    const { firstname, lastname, email, phone_number, company, address } = req.body;
 
     logger.info(`req.user.id=${req.user.id}`);
     if (!req.user) {
@@ -71,14 +73,23 @@ router.put('/profile', auth, async (req, res) => {
     if (firstname) updates.firstname = firstname;
     if (lastname) updates.lastname = lastname;
     if (email) updates.email = email;
+    if (phone_number) updates.phone_number = phone_number;
+    if (company) updates.company = company;
+    if (address){
+      if (address.country && address.country != "") updates.country = address.country;
+      if (address.region && address.region != "") updates.region = address.region;
+      if (address.city && address.city != "") updates.city = address.city;
+      if (address.street && address.street != "") updates.street = address.street;
+      if (address.zipcode && address.zipcode != "") updates.zipcode = address.zipcode;
+    } 
 
     // Check password
-    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    // const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+    //if (!isValidPassword) {
+    //  return res.status(401).json({ error: 'Invalid credentials' });
+    //}
 
-    if (newPassword) updates.password = newPassword;
+    //if (newPassword) updates.password = newPassword;
 
     // Vérification de l'unicité de l'email
     if (email && email !== user.email) {
@@ -98,6 +109,58 @@ router.put('/profile', auth, async (req, res) => {
 
     res.json({
       message: 'User profile updated successfully',
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error('User profile update error:', error);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
+});
+
+// change password
+router.put('/change-password', auth, async (req, res) => {
+  try {
+
+    const { currentPassword, newPassword } = req.body;
+
+    logger.info(`req.user.id=${req.user.id}`);
+    if (!req.user) {
+      logger.error('No user found in request');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const userId = req.user.id; // Assuming auth middleware sets this
+    const user = await User.findByPk(userId);
+    if (!user) {
+      logger.error(`No user found with ID ${userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Mise à jour des informations de base
+    const updates = {};
+
+    // Check password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const newPasswordHash = await bcrypt.hash(newPassword, salt);
+
+    updates.password_hash = newPasswordHash;
+
+    // Mise à jour de l'utilisateur
+    await user.update(updates);
+
+    // Renvoyer les données mises à jour (sans le mot de passe)
+    const updatedUser = await User.findByPk(userId, {
+      attributes: { exclude: ['password_hash'] }
+    });
+
+    res.json({
+      message: 'User password changed successfully',
       user: updatedUser
     });
 
@@ -837,5 +900,67 @@ router.post('/domains/create', auth, async (req, res) => {
   }
 });
 
+// get /notification-settings AlertSettings
+
+router.get('/notification-settings', auth, async (req, res) => {
+  try {
+    if (!req.user) {
+      logger.error('No user found in request');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const userId = req.user.id;
+    logger.info(`req.user.id=${userId}`);
+
+    const settings = await AlertSettings.findAll({ where: { user_id: userId } });
+
+    if (!settings) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Settings retrieved successfully',
+      data: settings
+    });
+
+  } catch (error) {
+    logger.error('Error retrieving settings:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// put /notification-settings AlertSettings
+router.put('/notification-settings', auth, async (req, res) => {
+  try {
+    if (!req.user) {
+      logger.error('No user found in request');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const userId = req.user.id;
+    logger.info(`req.user.id=${userId}`);
+
+    const notificationSettings = req.body;
+
+    await AlertSettings.updateFromSettings(userId, notificationSettings);
+
+    const settings = await AlertSettings.findAll({ where: { user_id: userId } });
+
+    if (!settings) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      data: settings
+    });
+
+  } catch (error) {
+    logger.error('Error updating settings:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;

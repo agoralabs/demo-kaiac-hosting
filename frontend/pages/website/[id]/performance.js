@@ -84,7 +84,7 @@ export default function Performance() {
     
     setTogglingPlugin(true);
     try {
-      const response = await api.post(`/api/website/${id}/toggle-plugin-query-monitor`);
+      const response = await api.put(`/api/website/${id}/toggle-plugin-query-monitor`);
       
       if (response.data.success) {
         setQueryMonitorActive(!queryMonitorActive);

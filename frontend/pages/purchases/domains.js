@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import PurchasesPage from '../../components/PurchasesPage';
+import DomainAddModal from '../../components/hosting/DomainAddModal';
 import { 
   TrashIcon, 
   ListBulletIcon, 
@@ -132,7 +133,6 @@ export default function Domains() {
 
   const confirmToggleEmailDomain = async () => {
     const { domain } = emailConfirmModal;
-    console.log('domain', domain);
     if (!domain) return;
 
     try {
@@ -146,11 +146,10 @@ export default function Domains() {
       });
       setDomains(updatedDomains);
 
-      
       const payload = {
         domain: domain.domain_name
       };
-      // check if the domain is already activated
+      
       const response = (domain.is_emails_domain) ? 
         await api.post('/api/domains/deactivate-emails', payload) : 
         await api.post('/api/domains/activate-emails', payload);
@@ -163,7 +162,7 @@ export default function Domains() {
 
       setDomains(domains.map(d => {
         if (d.id === domain.id) {
-          return { ...d, is_emails_domain: updatedDomain.is_emails_domain, is_updating_email: true };
+          return { ...d, is_emails_domain: updatedDomain.is_emails_domain, is_updating_email: false };
         }
         return d;
       }));
@@ -175,7 +174,7 @@ export default function Domains() {
       toast.error(err.response?.data?.message || 'Échec de la mise à jour');
       setDomains(domains.map(d => {
         if (d.id === domain.id) {
-          return { ...d, is_updating_email: true };
+          return { ...d, is_updating_email: false };
         }
         return d;
       }));
@@ -352,86 +351,17 @@ export default function Domains() {
             </div>
           </div>
           
-          {addModal.open && (
-            <div className="fixed z-30 inset-0 overflow-y-auto">
-              <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                  <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-                </div>
-
-                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-                <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                  <form onSubmit={handleAddDomain}>
-                    <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                      <div className="sm:flex sm:items-start">
-                        <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
-                          <PlusIcon className="h-6 w-6 text-indigo-600" />
-                        </div>
-                        <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                          <h3 className="text-lg leading-6 font-medium text-gray-900">
-                            Ajouter un nouveau domaine
-                          </h3>
-                          <div className="mt-4 space-y-4">
-                            {addModal.error && (
-                              <p className="text-red-500 text-sm">{addModal.error}</p>
-                            )}
-                            <div>
-                              <label htmlFor="domain_name" className="block text-sm font-medium text-gray-700">
-                                Nom de domaine
-                              </label>
-                              <input
-                                type="text"
-                                id="domain_name"
-                                required
-                                value={addModal.domain_name}
-                                onChange={(e) => setAddModal({...addModal, domain_name: e.target.value})}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                placeholder="example.com"
-                              />
-                            </div>
-                            <div>
-                              <label htmlFor="expires_at" className="block text-sm font-medium text-gray-700">
-                                Date d'expiration
-                              </label>
-                              <input
-                                type="date"
-                                id="expires_at"
-                                required
-                                value={addModal.expires_at}
-                                onChange={(e) => setAddModal({...addModal, expires_at: e.target.value})}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                      <button
-                        type="submit"
-                        disabled={addModal.submitting}
-                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm"
-                      >
-                        {addModal.submitting ? (
-                          <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                        ) : (
-                          'Ajouter'
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={closeAddModal}
-                        className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
+          <DomainAddModal 
+            isOpen={addModal.open}
+            onClose={closeAddModal}
+            domainName={addModal.domain_name}
+            expiresAt={addModal.expires_at}
+            onDomainNameChange={(e) => setAddModal({...addModal, domain_name: e.target.value})}
+            onExpiresAtChange={(e) => setAddModal({...addModal, expires_at: e.target.value})}
+            onSubmit={handleAddDomain}
+            isSubmitting={addModal.submitting}
+            error={addModal.error}
+          />
 
           <div className="mt-8 flex flex-col">
             <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
@@ -494,12 +424,10 @@ export default function Domains() {
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm">
                               {domain.is_updating_email ? (
-                                <>
                                 <button onClick={() => void(0)}
                                   className='inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200'>
-                                <ArrowPathIcon className="h-5 w-5 animate-spin text-red-500" /> Processing...
+                                  <ArrowPathIcon className="h-5 w-5 animate-spin text-red-500" /> Processing...
                                 </button>
-                                </>
                               ) : (
                                 <button
                                   onClick={() => openEmailConfirmModal(domain)}

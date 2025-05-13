@@ -2440,7 +2440,7 @@ router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
       return res.status(404).json({ error: 'Website not found' });
     }
 
-    const toggle_query_monitor = !website.is_wp_query_monitor_enabled ? 'on' : 'off';
+    const toggle_wp_query_monitor = !website.is_wp_query_monitor_enabled ? 'on' : 'off';
     const userId = req.user.id;
     const domain_folder = website.domain_folder;
     const installation_method = 'toggle_query_monitor';
@@ -2452,7 +2452,7 @@ router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
       domain: website.Domain.domain_name,
       domain_folder,
       installation_method,
-      toggle_query_monitor,
+      toggle_wp_query_monitor,
       wp_db_name : website.wp_db_name,
       command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
