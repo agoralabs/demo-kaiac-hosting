@@ -287,7 +287,7 @@ export default function CreateWebsiteModal({
               <option value="">Sélectionnez un domaine</option>
               {domains.map(domain => (
                 <option key={domain.id} value={domain.id}>
-                  {domain.domain_name}
+                  {domain.category === 'system' ? `${domain.domain_name} - Sous domaine gratuit` : domain.domain_name}
                 </option>
               ))}
             </select>

@@ -70,7 +70,7 @@ module.exports = (sequelize) => {
       defaultValue: 'active'
     },
     category: {
-      type: DataTypes.ENUM('buyed', 'declared'),
+      type: DataTypes.ENUM('buyed', 'declared', 'system'),
       allowNull: false,
       defaultValue: 'declared'
     },

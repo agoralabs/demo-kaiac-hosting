@@ -4,7 +4,7 @@ import api from '../../lib/api';
 import toast from 'react-hot-toast';
 import { LinkIcon, EyeIcon, TrashIcon, NewspaperIcon, CodeBracketSquareIcon, 
     CircleStackIcon, PlusIcon, ArrowPathRoundedSquareIcon, ArrowPathIcon,
-    ChevronDownIcon, ChevronRightIcon, ArrowUpTrayIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+    ChevronDownIcon, ChevronRightIcon, ArrowUpTrayIcon, DocumentDuplicateIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import CreateWebsiteModal from './CreateWebsiteModal';
 import DeleteWebsiteModal from './DeleteWebsiteModal';
 import MySQLDatabaseModal from './MySQLDatabaseModal';
@@ -126,6 +126,38 @@ export default function HostingTable() {
     setSyncGitModalOpen(true);
   };
   
+  const handleDownloadDNSRecord = (website) => {
+    if (!website || !website.Domain) {
+      toast.error("Aucune information DNS disponible pour ce site");
+      return;
+    }
+    
+    const dnsRecord = `${website.record}.${website.Domain.domain_name}`;
+    // Créer le contenu du fichier DNS
+    const dnsContent = `# Configuration DNS pour ${website.name || "Site WordPress"} (${website.environment || "production"})
+# À ajouter dans votre zone DNS pour le domaine ${website.Domain.domain_name}
+
+# Enregistrement CNAME pour ${dnsRecord}
+${dnsRecord}.   300    IN    CNAME    ${process.env.NEXT_PUBLIC_ALB_DNS}.`;
+    
+    // Créer un blob et un lien de téléchargement
+    const blob = new Blob([dnsContent], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dns-record-${dnsRecord}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Nettoyer
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+    
+    toast.success("Fichier DNS téléchargé avec succès");
+  };
+
   const handlePushToEnvironment = async (pushData) => {
     try {
       // Ici vous implémenterez l'appel API pour pousser les modifications
@@ -310,6 +342,15 @@ export default function HostingTable() {
                         >
                           <ArrowPathRoundedSquareIcon className="h-5 w-5" />
                         </button>
+                        {website.Domain && (
+                          <button
+                            onClick={() => handleDownloadDNSRecord(website)}
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50"
+                            title="Télécharger les informations DNS"
+                          >
+                            <ArrowDownTrayIcon className="h-5 w-5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDbAccessClick(website)}
                           className="text-purple-600 hover:text-purple-900 p-1 rounded-full hover:bg-purple-50"

@@ -296,8 +296,15 @@ router.get('/domains', auth, async (req, res) => {
     const userId = req.user.id;
     const domains = await Domain.findAll({
       where: {
-        user_id: userId,
-        status: 'active'
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { user_id: userId },
+              { category: 'system' }
+            ]
+          },
+          { status: 'active' }
+        ]
       }
     });
 
@@ -962,5 +969,7 @@ router.put('/notification-settings', auth, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+
 
 module.exports = router;

@@ -94,4 +94,38 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+// post create admin user
+router.post('/create-admin-user', async (req, res) => {
+  try {
+
+    const { firstname, lastname, email, password } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+
+    if (user) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await User.create({
+      firstname,
+      lastname,
+      email,
+      password_hash: hashedPassword,
+      role: 'admin'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin User created successfully',
+      data: newUser
+    });
+
+  } catch (error) {
+    logger.error('Error creating admin user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

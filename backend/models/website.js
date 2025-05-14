@@ -165,6 +165,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    is_default_dns_domain: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    domain_name: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     subscription_id: {
         type: DataTypes.INTEGER,
         allowNull: false,

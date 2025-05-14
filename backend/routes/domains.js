@@ -624,5 +624,35 @@ router.post('/declare', auth, async (req, res) => {
   }
 });
 
+// add system domain
+router.post('/declare', auth, async (req, res) => {
+  try {
+
+    logger.info(`req.user.id=${req.user.id}`);
+    if (!req.user) {
+      logger.error('No user found in request');
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const userId = req.user.id;
+    const domainName = req.body;
+
+    const domain = await Domain.create({
+      user_id: userId,
+      domain_name: domainName,
+      category: 'system'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Domain created successfully',
+      data: domain
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;

@@ -140,15 +140,16 @@ router.post('/deploy-wordpress', auth, upload.fields([
       wp_source_domain } = req.body;
 
     const existingDomain = await Domain.findOne({
-      where: { id: domain_id }
+      where: {
+        id: domain_id
+      }
     });
 
-    // 4. Vérification des doublons de domaine
-
+    // 4. Vérification des doublons de sous domaine
     const existingWebsite = await Website.findOne({
       where: { 
         record : subdomain
-       },
+      },
       include: [{
         model: Domain,
         where: { domain_name: existingDomain.domain_name }
@@ -209,41 +210,7 @@ router.post('/deploy-wordpress', auth, upload.fields([
     const ftp_pwd = process.env.WP_DEFAULT_FTP_PWD;
     const ftp_host = process.env.WP_DEFAULT_FTP_HOST;
     const ftp_port = process.env.WP_DEFAULT_FTP_PORT;
-    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
-    const messageBody = JSON.stringify({
-      userId,
-      record,
-      domain,
-      domain_folder,
-      wp_db_name,
-      wp_db_user,
-      wp_db_password,
-      php_version,
-      wp_version,
-      installation_method,
-      git_repo_url,
-      git_branch,
-      git_username,
-      git_token,
-      wp_zip_location,
-      wp_db_dump_location,
-      wp_source_domain,
-      environment,
-      ftp_user,
-      ftp_pwd,
-      command: 'MANAGE_WP', // Déployer wordpress
-      requestedAt: new Date().toISOString()
-    });
-
-    const params = {
-      QueueUrl: queueUrl,
-      MessageBody: messageBody,
-      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
-      MessageDeduplicationId: `${userId}-${domain}-${Date.now()}` // unique à chaque envoi
-    };
-
-    const command = new SendMessageCommand(params);
-    await sqs.send(command);
+    const wp_domain_category = existingDomain.category;
 
     // 6. Création du site
     const newWebsite = await Website.create({
@@ -289,6 +256,44 @@ router.post('/deploy-wordpress', auth, upload.fields([
         }]
       }]
     });
+
+    const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    
+    const messageBody = JSON.stringify({
+      userId,
+      record,
+      domain,
+      domain_folder,
+      wp_db_name,
+      wp_db_user,
+      wp_db_password,
+      php_version,
+      wp_version,
+      installation_method,
+      git_repo_url,
+      git_branch,
+      git_username,
+      git_token,
+      wp_zip_location,
+      wp_db_dump_location,
+      wp_source_domain,
+      environment,
+      ftp_user,
+      ftp_pwd,
+      wp_domain_category,
+      command: 'MANAGE_WP', // Déployer wordpress
+      requestedAt: new Date().toISOString()
+    });
+
+    const params = {
+      QueueUrl: queueUrl,
+      MessageBody: messageBody,
+      MessageGroupId: 'wordpress-deploy', // obligatoire pour les FIFO queues
+      MessageDeduplicationId: `${userId}-${domain}-${Date.now()}` // unique à chaque envoi
+    };
+
+    const command = new SendMessageCommand(params);
+    await sqs.send(command);
 
     res.status(201).json({
         success: true,
@@ -453,6 +458,7 @@ router.delete('/delete-wordpress/:id', auth, async (req, res) => {
     const wp_version = website.wp_version;
     const ftp_user = website.ftp_user;
     const installation_method = "delete";
+    const wp_domain_category = website.Domain.category;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       userId,
@@ -466,6 +472,7 @@ router.delete('/delete-wordpress/:id', auth, async (req, res) => {
       php_version,
       wp_version,
       ftp_user,
+      wp_domain_category,
       command: 'MANAGE_WP', // Supprimer le site wordpress
       requestedAt: new Date().toISOString()
     });
@@ -959,6 +966,7 @@ router.post('/duplicate/:id', auth, async (req, res) => {
     const ftp_host = process.env.WP_DEFAULT_FTP_HOST;
     const ftp_port = process.env.WP_DEFAULT_FTP_PORT;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
+    const wp_domain_category = existingDomain.category;
 
     const messageBody = JSON.stringify({
       userId,
@@ -977,6 +985,7 @@ router.post('/duplicate/:id', auth, async (req, res) => {
       environment,
       ftp_user,
       ftp_pwd,
+      wp_domain_category,
       command: 'MANAGE_WP', // Déployer wordpress
       requestedAt: new Date().toISOString()
     });
@@ -1096,6 +1105,8 @@ router.post('/push-env', auth, async (req, res) => {
     
     const targetDomain = targetWebsite.Domain.domain_name;
     const sourceDomain = sourceWebsite.Domain.domain_name;
+    const wp_domain_category = targetWebsite.Domain.category;
+
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
       userId: userId,
@@ -1113,6 +1124,7 @@ router.post('/push-env', auth, async (req, res) => {
       wp_source_db_name: sourceWebsite.wp_db_name,
       environment: targetWebsite.environment,
       wp_push_location: pushInfosS3.s3_location,
+      wp_domain_category,
       command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
@@ -1679,6 +1691,7 @@ router.post('/:id/backups/:idbackup/restore', auth, async (req, res) => {
     const backup_location = backup.location;
     const wp_source_domain = `${website.record}.${website.Domain.domain_name}`;
     const backup_type = backup.type;
+    const wp_domain_category = existingDomain.category;
     
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
@@ -1700,6 +1713,7 @@ router.post('/:id/backups/:idbackup/restore', auth, async (req, res) => {
       wp_source_domain,
       backup_location,
       backup_type,
+      wp_domain_category,
       command: 'MANAGE_WP', // Deploy wordpress
       requestedAt: new Date().toISOString()
     });
