@@ -23,10 +23,34 @@ export default function HostingItem({
           {/* ... reste du header ... */}
           <div className="flex items-center space-x-4">
             <div className="text-center">
-            <p className="text-sm font-medium text-gray-500">Sites</p>
-            <p className="text-lg font-semibold">
-                {subscription.websites_count}/{subscription.max_websites}
-            </p>
+            {true && (
+              <>
+              <p className="text-sm font-medium text-gray-500">Domaines</p>
+              <p className="text-lg font-semibold">
+                  {subscription.domains_count}/{subscription.max_domains}
+              </p>
+              </>
+            )}
+            </div>
+            <div className="text-center">
+            {true && (
+              <>
+              <p className="text-sm font-medium text-gray-500">Sites</p>
+              <p className="text-lg font-semibold">
+                  {subscription.websites_count}/{subscription.max_websites}
+              </p>
+              </>
+            )}
+            </div>
+            <div className="text-center">
+            {true && (
+              <>
+              <p className="text-sm font-medium text-gray-500">Emails</p>
+              <p className="text-lg font-semibold">
+                  {subscription.emails_count}/{subscription.max_emails}
+              </p>
+              </>
+            )}
             </div>
             <button
               onClick={() => onToggleExpand()}

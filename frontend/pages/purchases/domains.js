@@ -14,7 +14,10 @@ import {
   ShoppingBagIcon, 
   MegaphoneIcon,
   ExclamationTriangleIcon,
-  EnvelopeIcon
+  EnvelopeIcon,
+  ShieldExclamationIcon,
+  NoSymbolIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -53,6 +56,10 @@ export default function Domains() {
     isUpdating: false
   });
 
+  const [isAwsDomain, setIsAwsDomain] = useState(false);
+  const [awsAccessKeyId, setAwsAccessKeyId] = useState('');
+  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('');
+
   const fetchDomains = async () => {
     try {
       setLoading(true);
@@ -70,6 +77,30 @@ export default function Domains() {
   useEffect(() => {
     fetchDomains();
   }, []);
+
+  const downloadDnsInfo = async (domainId) => {
+    try {
+      const response = await api.get(`/api/domains/get-dns-info/${domainId}`);
+      
+      // Créer un URL pour le blob
+      const url = window.URL.createObjectURL(new Blob([response.data.data]));
+      
+      // Créer un élément a temporaire
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `dns-info-${domainId}.txt`);
+      
+      // Ajouter au DOM, cliquer et supprimer
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Informations DNS téléchargées avec succès");
+    } catch (err) {
+      console.error("Erreur lors du téléchargement des informations DNS", err);
+      toast.error("Impossible de télécharger les informations DNS");
+    }
+  };
 
   const getDomainStatus = (expiresAt) => {
     if (!expiresAt) return 'unknown';
@@ -150,13 +181,7 @@ export default function Domains() {
         domain: domain.domain_name
       };
       
-      const response = (domain.is_emails_domain) ? 
-        await api.post('/api/domains/deactivate-emails', payload) : 
-        await api.post('/api/domains/activate-emails', payload);
-
-      const toastMessage = (domain.is_emails_domain) ? 
-        'Emails désactivé avec succès pour le domaine' : 
-        'Emails activé avec succès pour le domaine';
+      const response = await api.post('/api/domains/toggle-emails-activation', payload);
 
       const updatedDomain = response.data.data;
 
@@ -167,17 +192,16 @@ export default function Domains() {
         return d;
       }));
 
+      const toastMessage = (domain.is_emails_domain) ? 
+        'Emails désactivé avec succès pour le domaine' : 
+        'Emails activé avec succès pour le domaine';
+
       closeEmailConfirmModal();
       toast.success(toastMessage);
     } catch (err) {
       console.error('Erreur lors de la mise à jour du domaine', err);
       toast.error(err.response?.data?.message || 'Échec de la mise à jour');
-      setDomains(domains.map(d => {
-        if (d.id === domain.id) {
-          return { ...d, is_updating_email: false };
-        }
-        return d;
-      }));
+
       closeEmailConfirmModal();
     }
   };
@@ -268,16 +292,36 @@ export default function Domains() {
     });
   };
 
+
+  const handleAwsDomainChange = (e) => {
+    setIsAwsDomain(e.target.checked);
+    // Réinitialiser les champs AWS si la case est décochée
+    if (!e.target.checked) {
+      setAwsAccessKeyId('');
+      setAwsSecretAccessKey('');
+    }
+  };
+
+  const handleAwsAccessKeyIdChange = (e) => {
+    setAwsAccessKeyId(e.target.value);
+  };
+
+  const handleAwsSecretAccessKeyChange = (e) => {
+    setAwsSecretAccessKey(e.target.value);
+  };
+
   const handleAddDomain = async (e) => {
     e.preventDefault();
     
     try {
       setAddModal(prev => ({ ...prev, submitting: true, error: null }));
       
-      const response = await api.post('/api/user/domains', {
-        domain_name: addModal.domain_name,
-        expires_at: addModal.expires_at,
-        category: 'declared'
+      const response = await api.post('/api/domains/declare', {
+        domainName: addModal.domain_name,
+        expiresAt: addModal.expires_at,
+        isAwsDomain: isAwsDomain,
+        awsAccessKeyId: isAwsDomain ? awsAccessKeyId : undefined,
+        awsSecretAccessKey: isAwsDomain ? awsSecretAccessKey : undefined
       });
       
       setDomains([...domains, response.data.data]);
@@ -361,6 +405,12 @@ export default function Domains() {
             onSubmit={handleAddDomain}
             isSubmitting={addModal.submitting}
             error={addModal.error}
+            isAwsDomain={isAwsDomain}
+            onAwsDomainChange={handleAwsDomainChange}
+            awsAccessKeyId={awsAccessKeyId}
+            onAwsAccessKeyIdChange={handleAwsAccessKeyIdChange}
+            awsSecretAccessKey={awsSecretAccessKey}
+            onAwsSecretAccessKeyChange={handleAwsSecretAccessKeyChange}
           />
 
           <div className="mt-8 flex flex-col">
@@ -408,12 +458,17 @@ export default function Domains() {
                                     <ShoppingBagIcon className="h-4 w-4 text-indigo-500 mr-2" />
                                     <span>Acheté</span>
                                   </>
-                                ) : (
+                                ) : (domain.category === 'declared' ? (
                                   <>
-                                    <MegaphoneIcon className="h-4 w-4 text-green-500 mr-2" />
+                                    <MegaphoneIcon className="h-4 w-4 text-indigo-500 mr-2" />
                                     <span>Déclaré</span>
                                   </>
-                                )}
+                                ) : (
+                                  <>
+                                    <ShieldExclamationIcon className="h-4 w-4 text-green-500 mr-2" />
+                                    <span>Système</span>
+                                  </>
+                                ))}
                               </div>
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
@@ -428,34 +483,48 @@ export default function Domains() {
                                   className='inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200'>
                                   <ArrowPathIcon className="h-5 w-5 animate-spin text-red-500" /> Processing...
                                 </button>
-                              ) : (
-                                <button
-                                  onClick={() => openEmailConfirmModal(domain)}
-                                  className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
-                                    domain.is_emails_domain 
-                                      ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                                  }`}
-                                  title={domain.is_emails_domain ? "Désactiver pour les emails" : "Activer pour les emails"}
-                                >
-                                  <EnvelopeIcon className="h-4 w-4 mr-1" />
-                                  {domain.is_emails_domain ? 'Activé' : 'Désactivé'}
+                              ) : (domain.category == 'system' ? 
+                                <>
+                                <button disabled="true">
+                                  <NoSymbolIcon className="h-4 w-4 mr-1" />
                                 </button>
-                              )}
+                                </> 
+                                : (
+                                  <button
+                                    onClick={() => openEmailConfirmModal(domain)}
+                                    className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
+                                      domain.is_emails_domain 
+                                        ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                    }`}
+                                    title={domain.is_emails_domain ? "Désactiver pour les emails" : "Activer pour les emails"}
+                                  >
+                                    <EnvelopeIcon className="h-4 w-4 mr-1" />
+                                    {domain.is_emails_domain ? 'Activé' : 'Désactivé'}
+                                  </button>
+                                ))}
                             </td>
                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                               <button
+                                onClick={() => domain.is_emails_domain && domain.category != 'buyed' ? downloadDnsInfo(domain.id) : null}
+                                className={`mr-4 ${domain.is_emails_domain && domain.category != 'buyed' ? "text-indigo-600 hover:text-indigo-900" : "text-gray-400 cursor-not-allowed"}`}
+                                title={domain.is_emails_domain && domain.category != 'buyed' ? "Télécharger les informations DNS" : "Activez les emails pour ce domaine pour télécharger les informations DNS"}
+                                disabled={!domain.is_emails_domain || domain.category == 'buyed'}
+                              >
+                                <ArrowDownTrayIcon className="h-5 w-5" />
+                              </button>
+                              <button
                                 onClick={() => handleShowSites(domain)}
-                                className="text-indigo-600 hover:text-indigo-900 mr-4"
                                 title="Liste des sites"
+                                className="text-indigo-600 hover:text-indigo-900 mr-4"
                               >
                                 <ListBulletIcon className="h-5 w-5" />
                               </button>
                               <button
-                                onClick={() => domain.category !== 'buyed' && openDeleteModal(domain)}
-                                className={`${domain.category === 'buyed' ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
-                                title={domain.category === 'buyed' ? "Impossible de supprimer un domaine acheté" : "Supprimer"}
-                                disabled={domain.category === 'buyed'}
+                                onClick={() => domain.category !== 'buyed' && domain.category !== 'system' && openDeleteModal(domain)}
+                                className={`${(domain.category === 'buyed' || domain.category === 'system') ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
+                                title={(domain.category === 'buyed' || domain.category === 'system') ? "Impossible de supprimer un domaine acheté" : "Supprimer"}
+                                disabled={domain.category === 'buyed' || domain.category === 'system'}
                               >
                                 <TrashIcon className="h-5 w-5" />
                               </button>
@@ -634,12 +703,12 @@ export default function Domains() {
                                     </td>
                                     <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
                                       <a 
-                                        href={`${site.record}.${site.Domain.domain_name}`} 
+                                        href={`https://${site.record}.${site.Domain.domain_name}/`} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
                                         className="text-indigo-600 hover:text-indigo-800"
                                       >
-                                        ${site.record}.${site.Domain.domain_name}
+                                        https://{site.record}.{site.Domain.domain_name}/
                                       </a>
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">

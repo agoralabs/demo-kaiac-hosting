@@ -97,6 +97,18 @@ module.exports = (sequelize) => {
     aws_secret_access_key: {
       type: DataTypes.STRING(100),
       allowNull: true
+    },
+    dkim: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    subscription_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'subscriptions',
+          key: 'id'
+        }
     }
   }, {
     tableName: 'domains',
@@ -117,6 +129,9 @@ module.exports = (sequelize) => {
     }
   });
 
+
+
+  
   Domain.associate = (models) => {
     Domain.belongsTo(models.User, {
       foreignKey: 'user_id',
@@ -127,6 +142,12 @@ module.exports = (sequelize) => {
       foreignKey: 'domain_id',
       as: 'websites'
     });
+
+    Domain.belongsTo(models.Subscription, {
+      foreignKey: 'subscription_id',
+      as: 'subscription'
+    });
+
   };
 
   return Domain;

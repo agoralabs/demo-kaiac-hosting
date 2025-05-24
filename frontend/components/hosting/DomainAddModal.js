@@ -1,4 +1,5 @@
 // components/DomainAddModal.js
+import { useState } from 'react';
 import { PlusIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 export default function DomainAddModal({ 
@@ -10,7 +11,13 @@ export default function DomainAddModal({
   onExpiresAtChange, 
   onSubmit, 
   isSubmitting, 
-  error 
+  error,
+  isAwsDomain = false,
+  onAwsDomainChange,
+  awsAccessKeyId = '',
+  onAwsAccessKeyIdChange,
+  awsSecretAccessKey = '',
+  onAwsSecretAccessKeyChange
 }) {
   if (!isOpen) return null;
 
@@ -65,6 +72,61 @@ export default function DomainAddModal({
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       />
                     </div>
+                    
+                    <div className="flex items-start">
+                      <div className="flex items-center h-5">
+                        <input
+                          id="is_aws_domain"
+                          name="is_aws_domain"
+                          type="checkbox"
+                          checked={isAwsDomain}
+                          onChange={onAwsDomainChange}
+                          className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                        />
+                      </div>
+                      <div className="ml-3 text-sm">
+                        <label htmlFor="is_aws_domain" className="font-medium text-gray-700">
+                          Est-ce un domaine AWS ?
+                        </label>
+                        <p className="text-gray-500">Cochez cette case si votre domaine est géré par Amazon Route 53</p>
+                      </div>
+                    </div>
+                    
+                    {isAwsDomain && (
+                      <div className="space-y-4 p-4 bg-gray-50 rounded-md border border-gray-200">
+                        <div>
+                          <label htmlFor="aws_access_key_id" className="block text-sm font-medium text-gray-700">
+                            AWS Access Key ID
+                          </label>
+                          <input
+                            type="text"
+                            id="aws_access_key_id"
+                            name="aws_access_key_id"
+                            value={awsAccessKeyId}
+                            onChange={onAwsAccessKeyIdChange}
+                            placeholder="AKIAIOSFODNN7EXAMPLE"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            required={isAwsDomain}
+                          />
+                        </div>
+                        
+                        <div>
+                          <label htmlFor="aws_secret_access_key" className="block text-sm font-medium text-gray-700">
+                            AWS Secret Access Key
+                          </label>
+                          <input
+                            type="password"
+                            id="aws_secret_access_key"
+                            name="aws_secret_access_key"
+                            value={awsSecretAccessKey}
+                            onChange={onAwsSecretAccessKeyChange}
+                            placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            required={isAwsDomain}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

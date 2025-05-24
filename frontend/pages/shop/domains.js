@@ -4,7 +4,7 @@ import ShopPage from '../../components/ShopPage';
 import DomainSearch from '../../components/DomainSearch';
 import DomainRegistrationForm from '../../components/DomainRegistrationForm';
 import { 
-  CheckCircleIcon, EnvelopeIcon, ListBulletIcon,
+  CheckCircleIcon, ShieldExclamationIcon, ListBulletIcon,
   XCircleIcon, ArrowPathIcon, BeakerIcon, TrashIcon, 
   ExclamationTriangleIcon, ShoppingBagIcon, MegaphoneIcon } from '@heroicons/react/24/outline';
 import api from '../../lib/api';
@@ -699,12 +699,17 @@ export default function Domains() {
                                       <ShoppingBagIcon className="h-4 w-4 text-indigo-500 mr-2" />
                                       <span>Acheté</span>
                                     </>
-                                  ) : (
+                                  ) : (domain.category === 'declared' ? (
                                     <>
-                                      <MegaphoneIcon className="h-4 w-4 text-green-500 mr-2" />
+                                      <MegaphoneIcon className="h-4 w-4 text-indigo-500 mr-2" />
                                       <span>Déclaré</span>
                                     </>
-                                  )}
+                                  ) : (
+                                    <>
+                                      <ShieldExclamationIcon className="h-4 w-4 text-green-500 mr-2" />
+                                      <span>Système</span>
+                                    </>
+                                  ))}
                                 </div>
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
@@ -716,10 +721,10 @@ export default function Domains() {
 
                               <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                                 <button
-                                  onClick={() => domain.category !== 'buyed' && openDeleteModal(domain)}
-                                  className={`${domain.category === 'buyed' ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
-                                  title={domain.category === 'buyed' ? "Impossible de supprimer un domaine acheté" : "Supprimer"}
-                                  disabled={domain.category === 'buyed'}
+                                  onClick={() => domain.category !== 'buyed' && domain.category !== 'system' && openDeleteModal(domain)}
+                                  className={`${(domain.category === 'buyed' || domain.category === 'system') ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900'}`}
+                                  title={(domain.category === 'buyed' || domain.category === 'system') ? "Impossible de supprimer un domaine acheté" : "Supprimer"}
+                                  disabled={domain.category === 'buyed' || domain.category === 'system'}
                                 >
                                   <TrashIcon className="h-5 w-5" />
                                 </button>

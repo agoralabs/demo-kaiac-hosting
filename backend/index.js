@@ -26,6 +26,7 @@ if (missingVars.length > 0) {
 const express = require('express');
 const cors = require('cors');
 const db = require('./models');
+const activityLoggerMiddleware = require('./middleware/activityLogger');
 
 // Constants
 const MAX_RETRIES = 5;
@@ -63,10 +64,10 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), strip
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(activityLoggerMiddleware);
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/orders', require('./routes/orders'));
 app.use('/api/plans', require('./routes/plans'));
 app.use('/api/user', require('./routes/user'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
@@ -120,4 +121,20 @@ async function startServer() {
   }
 }
 
-startServer();
+//startServer();
+
+async function startNodeOnly() {
+  try {
+    logger.info('Starting server...');
+    server = app.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  } catch (error) {
+    logger.error('Server startup error:', error);
+    logger.error(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    process.exit(1);
+  }
+}
+
+startNodeOnly();

@@ -59,6 +59,14 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(255),
       allowNull: false
     },
+    reset_password_token: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    reset_password_expires: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     stripe_customer_id: {
       type: DataTypes.STRING(255),
       allowNull: true

@@ -94,7 +94,7 @@ export default function WebSitePage({ children, title = '' }) {
             </div>
             <div className="p-6">
               <div className="flex items-center">
-                <Link href="/purchases/websites" className="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
+                <Link href="/manage/websites" className="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
                   <ArrowLeftIcon className="h-5 w-5 text-gray-500 hover:text-indigo-600" />
                 </Link>
                 <h2 className="text-xl font-semibold text-gray-900">{websiteName}</h2>
@@ -136,7 +136,7 @@ export default function WebSitePage({ children, title = '' }) {
         <div className="w-64 flex flex-col border-r border-gray-200 bg-white">
           <div className="p-6">
             <div className="flex items-center">
-              <Link href="/purchases/websites" className="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
+              <Link href="/manage/websites" className="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors">
                 <ArrowLeftIcon className="h-5 w-5 text-gray-500 hover:text-indigo-600" />
               </Link>
               <h2 className="text-xl font-semibold text-gray-900">{websiteName}</h2>

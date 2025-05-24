@@ -710,8 +710,11 @@ router.get('/monitor-processing/:id', auth, async (req, res) => {
 
     // find website by websiteId include Domain
     // Cette requête permet de récupérer un site web par son ID (websiteId)
-    const siteFromDb = await Website.findByPk(websiteId);
-
+    const siteFromDb = await Website.findByPk(websiteId,
+      {
+        attributes: ['is_processing_site']
+      });
+      
     if (!siteFromDb) {
       return res.status(404).json({ error: 'Website not found' });
     }
@@ -1171,8 +1174,7 @@ router.put('/:id/toggle-maintenance', auth, async (req, res) => {
       return res.status(404).json({ error: 'Website not found' });
     }
 
-    const is_maintenance_mode_enabled = req.body;
-    const toggle_maintenance_mode = is_maintenance_mode_enabled ? 'on' : 'off';
+    const toggle_maintenance_mode = !website.is_maintenance_mode_enabled ? 'on' : 'off';
     const userId = req.user.id;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
@@ -1228,7 +1230,7 @@ router.put('/:id/toggle-lscache', auth, async (req, res) => {
     }
 
     const is_lscache_enabled = req.body;
-    const toggle_lscache = is_lscache_enabled ? 'on' : 'off';
+    const toggle_lscache = !website.is_lscache_enabled ? 'on' : 'off';
     const userId = req.user.id;
     const queueUrl = process.env.WEBSITE_DEPLOY_QUEUE_URL;
     const messageBody = JSON.stringify({
@@ -2494,6 +2496,90 @@ router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
   } catch (error) {
     logger.error(error);
     logger.error('Error updating WP debug:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// get generated wp config
+router.get('/:id/generate-wp-report', auth, async (req, res) => {
+  try {
+    const websiteId = req.params.id;
+    const website = await Website.findByPk(websiteId,{
+      include: [{
+        model: Domain
+      }]
+    });
+
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+
+    const domain_folder = website.domain_folder;
+
+    // Récupérer ec2_instance_id grâce à process.env.EC2_TAG_NAME et process.env.EC2_TAG_VALUE
+    const ec2_instance_id = await getEc2InstanceId(process.env.EC2_TAG_NAME, process.env.EC2_TAG_VALUE);
+
+    logger.info(`ec2_instance_id=${ec2_instance_id}`);
+
+    const web_root = `/var/www/${domain_folder}`;
+    let cmd = `/home/ubuntu/generate_wp_report.sh ${web_root}`;
+
+    logger.info(`cmd=${cmd}`);
+    // Commande pour lire le fichier de logs
+    const command = new SendCommandCommand({
+      InstanceIds: [ec2_instance_id], // ID de l'instance EC2
+      DocumentName: 'AWS-RunShellScript',
+      Comment: `Generate report config for ${web_root}`,
+      Parameters: {
+        commands: [cmd]
+      }
+    });
+
+    const response = await ssmClient.send(command);
+    
+    // Wait for command completion with timeout
+    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < timeout) {
+        const command = new GetCommandInvocationCommand({
+          CommandId: commandId,
+          InstanceId: instanceId
+        });
+    
+        const response = await ssmClient.send(command);
+    
+        if (response.Status === 'Success') {
+          return response.StandardOutputContent;
+        } else if (response.Status === 'Failed') {
+          throw new Error(`Command failed: ${response.StandardErrorContent}`);
+        }
+    
+        // Wait 1 second before checking again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    
+      throw new Error('Command timed out');
+    };
+    
+    const commandId = response.Command.CommandId;
+    logger.info(`commandId=${commandId}`);
+    
+    const output = await getCommandOutput(commandId, ec2_instance_id);
+    logger.info(`output=${output}`);
+
+    // Parse output string to JSON
+    const reportData = JSON.parse(output);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Report retrieved successfully',
+      data: reportData
+    });
+
+  } catch (error) {
+    logger.error(error);
+    logger.error('Error retrieving Report:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

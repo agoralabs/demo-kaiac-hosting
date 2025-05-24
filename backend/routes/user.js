@@ -8,6 +8,7 @@ const {
   OrderItem, 
   Subscription, 
   Website, 
+  UserActivity,
   Domain, 
   Email,
   Payment,
@@ -17,6 +18,7 @@ const {
 const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
 const logger = require('../utils/logger');
+const ActivityLogger = require('../services/activityLogger');
 const { Op } = require('sequelize');
 const axios = require('axios');
 
@@ -366,7 +368,10 @@ router.get('/domains/:id/websites', auth, async (req, res) => {
       where: {
         user_id: userId,
         domain_id: domainId
-      }
+      },
+      include: [{
+        model: Domain
+      }],
     });
 
     res.json({
@@ -971,5 +976,30 @@ router.put('/notification-settings', auth, async (req, res) => {
 });
 
 
+
+/**
+ * @route GET /api/user/activities
+ * @desc Récupère les activités de l'utilisateur avec pagination
+ * @access Private
+ */
+router.get('/activities', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.per_page) || 10;
+    
+    const result = await ActivityLogger.getUserActivities(req.user.id, {
+      page,
+      limit: perPage,
+      method: req.query.method,
+      startDate: req.query.start_date,
+      endDate: req.query.end_date
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching user activities:', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération des activités' });
+  }
+});
 
 module.exports = router;

@@ -6,7 +6,7 @@ import {
     EnvelopeIcon,
     ArrowPathIcon,  // Anciennement RefreshIcon
     CreditCardIcon,
-    CodeBracketIcon,
+    ShoppingBagIcon,
     ServerStackIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
@@ -16,13 +16,13 @@ export default function PurchasesPage({ children, title = '' }) {
   const { user } = useAuth();
 
   const menuItems = [
-    { name: 'Tableau de bord', path: '/purchases', icon: HomeIcon },
-    { name: 'Mes hébergements', path: '/purchases/hosting', icon: ServerStackIcon },
-    { name: 'Mes sites WordPress', path: '/purchases/websites', icon: GlobeAltIcon },
-    { name: 'Mes domaines', path: '/purchases/domains', icon: LinkIcon },
-    { name: 'Mes adresses e-mails', path: '/purchases/emails', icon: EnvelopeIcon },
-    { name: 'Mes paiements', path: '/purchases/payments', icon: CreditCardIcon },
-    { name: 'Mes factures', path: '/purchases/invoices', icon: ArrowPathIcon }
+    { name: 'Mon Tableau de bord', path: '/manage', icon: HomeIcon },
+    { name: 'Mes formules', path: '/manage/hosting', icon: ShoppingBagIcon },
+    { name: 'Mes noms de domaines', path: '/manage/domains', icon: LinkIcon },
+    { name: 'Mes sites WordPress', path: '/manage/websites', icon: GlobeAltIcon },
+    { name: 'Mes adresses e-mails', path: '/manage/emails', icon: EnvelopeIcon },
+    { name: 'Mes paiements', path: '/manage/payments', icon: CreditCardIcon },
+    { name: 'Mes factures', path: '/manage/invoices', icon: ArrowPathIcon }
   ];
 
   return (
@@ -31,7 +31,7 @@ export default function PurchasesPage({ children, title = '' }) {
       <div className="hidden md:flex md:flex-shrink-0">
         <div className="w-64 flex flex-col border-r border-gray-200 bg-white">
           <div className="p-6">
-            <h2 className="text-xl font-semibold text-gray-900">Mes achats</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Ma console </h2>
             <div className="w-12 h-1 bg-indigo-600 mt-2 rounded-full"></div>
           </div>
           

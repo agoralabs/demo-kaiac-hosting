@@ -102,3 +102,7 @@ router.get('/:id/pdf', invoiceController.generateInvoicePdf);
 ## Routes (routes/api/subscriptionHistoryRoutes.js)
 
 router.get('/subscriptions/:id/history', historyController.getSubscriptionHistory);
+
+
+
+npx sequelize-cli db:migrate --config=config/database.js

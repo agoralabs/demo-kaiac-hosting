@@ -71,3 +71,4 @@ db.initializeDatabase = async () => {
 
 // Export the db object
 module.exports = db;
+// db.Transaction = require('./Transaction')(sequelize, Sequelize.DataTypes);

@@ -11,8 +11,9 @@ export default function PaymentMethodModal({
 
   const methods = [
     { id: 'card', name: 'Carte bancaire', icon: '💳', available: true },
-    { id: 'paypal', name: 'PayPal', icon: '🔵', available: false },
-    { id: 'mobile_money', name: 'Mobile Money', icon: '📱', available: false }
+    { id: 'paypal', name: 'PayPal', icon: '🔵', available: true },
+    { id: 'wave', name: 'Wave', icon: '🌊', available: true },
+    { id: 'mobile_money', name: 'Mobile Money', icon: '📱', available: true }
   ];
 
   if (!isOpen) return null;
