@@ -20,7 +20,46 @@ export default function WebsiteParameters() {
     const fetchParameters = async () => {
       try {
         setLoading(true);
-        const response = await api.get(`/api/website/${id}/generate-wp-report`, { timeout: 30000 });        setParameters(response.data.data);
+        const response = await api.get(`/api/website/${id}/generate-wp-report`, { timeout: 30000 });
+        
+        // Traitement des données pour gérer les chaînes avec guillemets échappés
+        const data = response.data.data;
+        
+        // Fonction pour nettoyer les chaînes avec guillemets échappés
+        const cleanStringValue = (value) => {
+          if (typeof value === 'string') {
+            // Si la chaîne commence et se termine par des guillemets
+            if (value.startsWith('"') && value.endsWith('"')) {
+              // Enlever les guillemets externes et désescaper les guillemets internes
+              value = value.substring(1, value.length - 1);
+            }
+            
+            // Désescaper les barres obliques (\/), les guillemets (\") et les doubles barres obliques (\\)
+            return value.replace(/\\\//g, '/').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+          }
+          return value;
+        };
+        
+        // Nettoyer les objets imbriqués
+        const cleanObject = (obj) => {
+          if (!obj || typeof obj !== 'object') return obj;
+          
+          const result = Array.isArray(obj) ? [...obj] : {...obj};
+          
+          Object.keys(result).forEach(key => {
+            if (typeof result[key] === 'object' && result[key] !== null) {
+              result[key] = cleanObject(result[key]);
+            } else if (typeof result[key] === 'string') {
+              result[key] = cleanStringValue(result[key]);
+            }
+          });
+          
+          return result;
+        };
+        
+        // Appliquer le nettoyage à toutes les données
+        const cleanedData = cleanObject(data);
+        setParameters(cleanedData);
         setError(null);
       } catch (err) {
         console.error('Error fetching website parameters:', err);
@@ -187,7 +226,11 @@ export default function WebsiteParameters() {
               {parameters.theme.length > 0 ? (
                 <ul className="list-disc pl-5">
                   {parameters.theme.map((theme, index) => (
-                    <li key={index}>{theme}</li>
+                    <li key={index}>
+                      <strong>{theme.title || theme.name}</strong>
+                      {theme.version && <span className="ml-2 text-sm text-gray-500">v{theme.version}</span>}
+                      {theme.status === 'active' && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Actif</span>}
+                    </li>
                   ))}
                 </ul>
               ) : (
@@ -203,8 +246,13 @@ export default function WebsiteParameters() {
               {parameters.plugins.active.length > 0 ? (
                 <ul className="list-disc pl-5 mb-4">
                   {parameters.plugins.active.map((plugin, index) => (
-                    <li key={index}>{plugin}</li>
+                    <li key={index}>
+                      <strong>{plugin.title || plugin.name}</strong>
+                      {plugin.version && <span className="ml-2 text-sm text-gray-500">v{plugin.version}</span>}
+                      {plugin.status === 'active' && <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Actif</span>}
+                    </li>
                   ))}
+
                 </ul>
               ) : (
                 <p className="text-gray-500 mb-4">Aucun plugin actif</p>

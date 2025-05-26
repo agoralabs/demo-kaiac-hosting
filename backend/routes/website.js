@@ -370,6 +370,29 @@ router.get('/get-infos/:id', auth, async (req, res) => {
       }]
     });
 
+    const domain_folder = newWebsiteFromDb.domain_folder;
+    const web_root = `/var/www/${domain_folder}`;
+    let cmd = `cat ${web_root}/site-size-data.json`;
+    let comment = `Get site-size-data for ${web_root}`;
+    
+    const output = await executeShellCommand(cmd, comment);
+
+    // Parse output string to JSON
+    const sizesReportData = JSON.parse(output);
+    // sizesReportData = {
+    //   "web_root": "/var/www/site1_skyscaledev_com",
+    //   "web_size_bytes": "73030558",
+    //   "db_name": "site1_skyscaledev_com_db",
+    //   "db_size_bytes": "2211840"
+    // }
+
+    if(sizesReportData && sizesReportData.web_size_bytes && sizesReportData.db_size_bytes){
+      const totalSize = parseInt(sizesReportData.web_size_bytes) + parseInt(sizesReportData.db_size_bytes);
+      const totalSizeMB = Math.round(totalSize / (1024 * 1024));
+      newWebsiteFromDb.used_storage_mb = totalSizeMB;
+      await newWebsiteFromDb.save();
+    }
+
     if (!newWebsiteFromDb) {
       return res.status(404).json({ error: 'Website not found' });
     }
@@ -2441,7 +2464,6 @@ router.post('/:id/plugins/install-query-monitor', auth, async (req, res) => {
   }
 });
 
-
 // put /${id}/toggle-plugin-query-monitor
 router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
   try {
@@ -2500,6 +2522,44 @@ router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
   }
 });
 
+async function executeShellCommand(command, comment, timeout = 30000) {
+  // Récupérer ec2_instance_id grâce à process.env.EC2_TAG_NAME et process.env.EC2_TAG_VALUE
+  const ec2_instance_id = await getEc2InstanceId(process.env.EC2_TAG_NAME, process.env.EC2_TAG_VALUE);
+
+  const sendCommand = new SendCommandCommand({
+    InstanceIds: [ec2_instance_id],
+    DocumentName: 'AWS-RunShellScript',
+    Comment: comment,
+    Parameters: {
+      commands: [command]
+    }
+  });
+
+  const response = await ssmClient.send(sendCommand);
+  const commandId = response.Command.CommandId;
+  
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    const getCommand = new GetCommandInvocationCommand({
+      CommandId: commandId,
+      InstanceId: ec2_instance_id
+    });
+
+    const commandResponse = await ssmClient.send(getCommand);
+
+    if (commandResponse.Status === 'Success') {
+      return commandResponse.StandardOutputContent;
+    } else if (commandResponse.Status === 'Failed') {
+      throw new Error(`Command failed: ${commandResponse.StandardErrorContent}`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  throw new Error('Command timed out');
+}   
+
 // get generated wp config
 router.get('/:id/generate-wp-report', auth, async (req, res) => {
   try {
@@ -2516,57 +2576,11 @@ router.get('/:id/generate-wp-report', auth, async (req, res) => {
 
     const domain_folder = website.domain_folder;
 
-    // Récupérer ec2_instance_id grâce à process.env.EC2_TAG_NAME et process.env.EC2_TAG_VALUE
-    const ec2_instance_id = await getEc2InstanceId(process.env.EC2_TAG_NAME, process.env.EC2_TAG_VALUE);
-
-    logger.info(`ec2_instance_id=${ec2_instance_id}`);
-
     const web_root = `/var/www/${domain_folder}`;
-    let cmd = `/home/ubuntu/generate_wp_report.sh ${web_root}`;
-
-    logger.info(`cmd=${cmd}`);
-    // Commande pour lire le fichier de logs
-    const command = new SendCommandCommand({
-      InstanceIds: [ec2_instance_id], // ID de l'instance EC2
-      DocumentName: 'AWS-RunShellScript',
-      Comment: `Generate report config for ${web_root}`,
-      Parameters: {
-        commands: [cmd]
-      }
-    });
-
-    const response = await ssmClient.send(command);
+    let cmd = `cat ${web_root}/wp-config-report.json`;
+    let comment = `Generate report config for ${web_root}`;
     
-    // Wait for command completion with timeout
-    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
-      const startTime = Date.now();
-      
-      while (Date.now() - startTime < timeout) {
-        const command = new GetCommandInvocationCommand({
-          CommandId: commandId,
-          InstanceId: instanceId
-        });
-    
-        const response = await ssmClient.send(command);
-    
-        if (response.Status === 'Success') {
-          return response.StandardOutputContent;
-        } else if (response.Status === 'Failed') {
-          throw new Error(`Command failed: ${response.StandardErrorContent}`);
-        }
-    
-        // Wait 1 second before checking again
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    
-      throw new Error('Command timed out');
-    };
-    
-    const commandId = response.Command.CommandId;
-    logger.info(`commandId=${commandId}`);
-    
-    const output = await getCommandOutput(commandId, ec2_instance_id);
-    logger.info(`output=${output}`);
+    const output = await executeShellCommand(cmd, comment);
 
     // Parse output string to JSON
     const reportData = JSON.parse(output);
