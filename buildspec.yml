@@ -1,0 +1,70 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 16
+    commands:
+      - echo install process started
+  build:
+    commands:
+      - echo build process started now
+      - echo "🔨 Génération du fichier backend/.env..."
+      - echo "PORT=${PORT}" >> backend/.env
+      - echo "DB_HOST=${DB_HOST}" >> backend/.env
+      - echo "DB_USER=${DB_USER}" >> backend/.env
+      - echo "DB_PASSWORD=${DB_PASSWORD}" >> backend/.env
+      - echo "DB_NAME=${DB_NAME}" >> backend/.env
+      - echo "DB_PORT=${DB_PORT}" >> backend/.env
+      - echo "NODE_ENV=${NODE_ENV}" >> backend/.env
+      - echo "FRONTEND_URL=${FRONTEND_URL}" >> backend/.env
+      - echo "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}" >> backend/.env
+      - echo "STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}" >> backend/.env
+      - echo "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" >> backend/.env
+      - echo "REDIS_URL=${REDIS_URL}" >> backend/.env
+      - echo "REDIS_HOST=${REDIS_HOST}" >> backend/.env
+      - echo "REDIS_PORT=${REDIS_PORT}" >> backend/.env
+      - echo "DATABASE_CHARSET=${DATABASE_CHARSET}" >> backend/.env
+      - echo "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}" >> backend/.env
+      - echo "SESSION_SECRET=${SESSION_SECRET}" >> backend/.env
+      - echo "JWT_SECRET=${JWT_SECRET}" >> backend/.env
+      - echo "STRIPE_ENABLED=${STRIPE_ENABLED}" >> backend/.env
+      - echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> backend/.env
+      - echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> backend/.env
+      - echo "AWS_REGION=${AWS_REGION}" >> backend/.env
+      - echo "AWS_BUCKET_NAME=${AWS_BUCKET_NAME}" >> backend/.env
+      - echo "EMAIL_DOMAIN_CREATION_QUEUE_URL=${EMAIL_DOMAIN_CREATION_QUEUE_URL}" >> backend/.env
+      - echo "MAILCOW_HOST=${MAILCOW_HOST}" >> backend/.env
+      - echo "MAILCOW_API_KEY=${MAILCOW_API_KEY}" >> backend/.env
+      - echo "WEBSITE_DEPLOY_QUEUE_URL=${WEBSITE_DEPLOY_QUEUE_URL}" >> backend/.env
+      - echo "WP_DEFAULT_DB_USER=${WP_DEFAULT_DB_USER}" >> backend/.env
+      - echo "WP_DEFAULT_DB_USER_PWD=${WP_DEFAULT_DB_USER_PWD}" >> backend/.env
+      - echo "WP_DEFAULT_PHP_VERSION=${WP_DEFAULT_PHP_VERSION}" >> backend/.env
+      - echo "WP_DEFAULT_VERSION=${WP_DEFAULT_VERSION}" >> backend/.env
+      - echo "GIT_PERSONAL_ACCESS_TOKEN=${GIT_PERSONAL_ACCESS_TOKEN}" >> backend/.env
+      - echo "GIT_PERSONAL_ACCESS_TOKEN_CLASSIC=${GIT_PERSONAL_ACCESS_TOKEN_CLASSIC}" >> backend/.env
+      - echo "PHPMYADMIN_URL=${PHPMYADMIN_URL}" >> backend/.env
+      - echo "WP_DEFAULT_FTP_HOST=${WP_DEFAULT_FTP_HOST}" >> backend/.env
+      - echo "WP_DEFAULT_FTP_PORT=${WP_DEFAULT_FTP_PORT}" >> backend/.env
+      - echo "WP_DEFAULT_FTP_PWD=${WP_DEFAULT_FTP_PWD}" >> backend/.env
+      - echo "EC2_TAG_NAME=${EC2_TAG_NAME}" >> backend/.env
+      - echo "EC2_TAG_VALUE=${EC2_TAG_VALUE}" >> backend/.env
+      - echo "PAYPAL_API=${PAYPAL_API}" >> backend/.env
+      - echo "PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID}" >> backend/.env
+      - echo "PAYPAL_SECRET=${PAYPAL_SECRET}" >> backend/.env
+      - echo "WAVE_API_URL=${WAVE_API_URL}" >> backend/.env
+      - echo "WAVE_SECRET_KEY=${WAVE_SECRET_KEY}" >> backend/.env
+      - echo "WAVE_BUSINESS_ID=${WAVE_BUSINESS_ID}" >> backend/.env
+      - echo "WAVE_WEBHOOK_SECRET=${WAVE_WEBHOOK_SECRET}" >> backend/.env
+      - echo "BACKEND_URL=${BACKEND_URL}" >> backend/.env
+      - echo "CINETPAY_API_KEY=${CINETPAY_API_KEY}" >> backend/.env
+      - echo "CINETPAY_SITE_ID=${CINETPAY_SITE_ID}" >> backend/.env
+      - echo "CINETPAY_API_URL=${CINETPAY_API_URL}" >> backend/.env
+      - echo "SMTP_HOST=${SMTP_HOST}" >> backend/.env
+      - echo "SMTP_PORT=${SMTP_PORT}" >> backend/.env
+      - echo "SMTP_FROM=${SMTP_FROM}" >> backend/.env
+      - echo "SMTP_USER=${SMTP_USER}" >> backend/.env
+      - echo "SMTP_PASS=${SMTP_PASS}" >> backend/.env
+      - echo "SMTP_SECURE=${SMTP_SECURE}" >> backend/.env
+  post_build:
+    commands:
+      - echo build process finished

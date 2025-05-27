@@ -1,0 +1,11 @@
+version: 0.0
+os: linux
+files:
+  - source: /
+    destination: /home/ubuntu/demo-kaiac-hosting
+file_exists_behavior: OVERWRITE
+hooks:
+  AfterInstall:
+    - location: backend/start-production.sh
+      timeout: 1000
+      runas: root
