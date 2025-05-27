@@ -370,28 +370,28 @@ router.get('/get-infos/:id', auth, async (req, res) => {
       }]
     });
 
-    const domain_folder = newWebsiteFromDb.domain_folder;
-    const web_root = `/var/www/${domain_folder}`;
-    let cmd = `cat ${web_root}/site-size-data.json`;
-    let comment = `Get site-size-data for ${web_root}`;
+    // const domain_folder = newWebsiteFromDb.domain_folder;
+    // const web_root = `/var/www/${domain_folder}`;
+    // let cmd = `cat ${web_root}/site-size-data.json`;
+    // let comment = `Get site-size-data for ${web_root}`;
     
-    const output = await executeShellCommand(cmd, comment);
+    // const output = await executeShellCommand(cmd, comment);
 
-    // Parse output string to JSON
-    const sizesReportData = JSON.parse(output);
-    // sizesReportData = {
-    //   "web_root": "/var/www/site1_skyscaledev_com",
-    //   "web_size_bytes": "73030558",
-    //   "db_name": "site1_skyscaledev_com_db",
-    //   "db_size_bytes": "2211840"
+    // // Parse output string to JSON
+    // const sizesReportData = JSON.parse(output);
+    // // sizesReportData = {
+    // //   "web_root": "/var/www/site1_skyscaledev_com",
+    // //   "web_size_bytes": "73030558",
+    // //   "db_name": "site1_skyscaledev_com_db",
+    // //   "db_size_bytes": "2211840"
+    // // }
+
+    // if(sizesReportData && sizesReportData.web_size_bytes && sizesReportData.db_size_bytes){
+    //   const totalSize = parseInt(sizesReportData.web_size_bytes) + parseInt(sizesReportData.db_size_bytes);
+    //   const totalSizeMB = Math.round(totalSize / (1024 * 1024));
+    //   newWebsiteFromDb.used_storage_mb = totalSizeMB;
+    //   await newWebsiteFromDb.save();
     // }
-
-    if(sizesReportData && sizesReportData.web_size_bytes && sizesReportData.db_size_bytes){
-      const totalSize = parseInt(sizesReportData.web_size_bytes) + parseInt(sizesReportData.db_size_bytes);
-      const totalSizeMB = Math.round(totalSize / (1024 * 1024));
-      newWebsiteFromDb.used_storage_mb = totalSizeMB;
-      await newWebsiteFromDb.save();
-    }
 
     if (!newWebsiteFromDb) {
       return res.status(404).json({ error: 'Website not found' });
