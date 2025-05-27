@@ -9,7 +9,7 @@ phases:
     commands:
       - echo build process started now
       - echo "🔨 Génération du fichier backend/.env..."
-      - echo "PORT=${PORT}" >> backend/.env
+      - echo "PORT=${PORT}" > backend/.env
       - echo "DB_HOST=${DB_HOST}" >> backend/.env
       - echo "DB_USER=${DB_USER}" >> backend/.env
       - echo "DB_PASSWORD=${DB_PASSWORD}" >> backend/.env
@@ -68,3 +68,6 @@ phases:
   post_build:
     commands:
       - echo build process finished
+artifacts:
+  files:
+    - '**/*'  # Inclut le .env dans l'artefact déployé
