@@ -104,5 +104,69 @@ router.get('/:id/pdf', invoiceController.generateInvoicePdf);
 router.get('/subscriptions/:id/history', historyController.getSubscriptionHistory);
 
 
-
+# Migration Base de données
 npx sequelize-cli db:migrate --config=config/database.js
+
+J'ai créé le script shell start-production.sh dans le dossier backend et je l'ai rendu exécutable. Voici les d
+étails pour démarrer votre backend en production sur un serveur Ubuntu :
+
+### Packages requis à installer au préalable
+
+bash
+# Mise à jour des packages
+sudo apt update
+sudo apt upgrade -y
+
+# Installation de Node.js (v14 ou supérieur)
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Installation de MySQL
+sudo apt install -y mysql-server
+
+# Installation de Redis (optionnel, pour la gestion des sessions)
+sudo apt install -y redis-server
+
+# Outils supplémentaires
+sudo apt install -y git nginx
+
+
+### Utilisation du script
+
+1. Connectez-vous à votre serveur Ubuntu
+2. Naviguez vers le dossier backend de votre application
+3. Modifiez le script pour configurer vos variables d'environnement :
+  bash
+   nano start-production.sh
+
+  Personnalisez les valeurs pour DB_HOST, DB_USER, DB_PASS, DB_NAME, JWT_SECRET et STRIPE_SECRET_KEY
+
+4. Exécutez le script :
+  bash
+   ./start-production.sh
+
+
+Le script va :
+• Vérifier que vous êtes dans le bon répertoire
+• Installer les dépendances si nécessaire
+• Installer PM2 (gestionnaire de processus pour Node.js) si nécessaire
+• Démarrer l'application en mode production
+• Configurer PM2 pour redémarrer automatiquement l'application en cas de redémarrage du serveur
+
+Pour vérifier l'état de votre application :
+bash
+pm2 status
+
+
+Pour consulter les logs :
+bash
+pm2 logs kaiac-backend
+
+
+Pour arrêter l'application :
+bash
+pm2 stop kaiac-backend
+
+
+N'oubliez pas de configurer également Nginx comme proxy inverse pour exposer votre application sur le port 80/
+443 avec HTTPS.
