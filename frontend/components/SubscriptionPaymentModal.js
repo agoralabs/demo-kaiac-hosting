@@ -48,7 +48,7 @@ export default function SubscriptionPaymentModal({ isOpen, onClose, plan, onSucc
     try {
       // Ici vous ajouterez la logique de paiement
       // 1. Obtenir le clientSecret depuis votre backend
-      const response = await api.post('/api/subscriptions/subscribe', plan);
+      const response = await api.post('/api/payment/subscribe', plan);
 
       const payment = response.data.payment;
       const clientSecret = payment.stripe_payment_client_secret;
