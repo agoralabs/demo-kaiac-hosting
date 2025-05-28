@@ -6,6 +6,7 @@ files:
 file_exists_behavior: OVERWRITE
 hooks:
   AfterInstall:
-    - location: backend/start-production.sh
+    - location: start-production.sh  # Chemin relatif au working_directory
       timeout: 1000
       runas: root
+      working_directory: /home/ubuntu/demo-kaiac-hosting/backend
