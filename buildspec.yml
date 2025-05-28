@@ -65,6 +65,7 @@ phases:
       - echo "SMTP_USER=${SMTP_USER}" >> backend/.env
       - echo "SMTP_PASS=${SMTP_PASS}" >> backend/.env
       - echo "SMTP_SECURE=${SMTP_SECURE}" >> backend/.env
+      - chmod +x backend/start-production.sh
   post_build:
     commands:
       - echo build process finished
