@@ -1,18 +1,24 @@
 #!/bin/bash
 
 # Script de démarrage du backend KaiaC Hosting en production
-# À placer dans le répertoire backend du projet
+# Version adaptée pour être exécutée depuis n'importe quel répertoire
 
-# Variables d'environnement (à personnaliser)
+# Définition du répertoire cible
+BACKEND_DIR="/home/ubuntu/demo-kaiac-hosting/backend"
+
+# Variables d'environnement
 export PORT=3001
 export NODE_ENV=production
 
-# Décommentez si vous utilisez Redis
-# export REDIS_URL="redis://localhost:6379"
+# Se déplacer dans le répertoire backend
+cd "$BACKEND_DIR" || {
+  echo "Erreur: Impossible d'accéder au répertoire backend $BACKEND_DIR"
+  exit 1
+}
 
-# Vérification que nous sommes dans le bon répertoire
+# Vérification de la présence des fichiers essentiels
 if [ ! -f "package.json" ]; then
-  echo "Erreur: Ce script doit être exécuté depuis le répertoire backend"
+  echo "Erreur: Fichier package.json introuvable dans $BACKEND_DIR"
   exit 1
 fi
 
@@ -22,23 +28,26 @@ if [ ! -d "node_modules" ]; then
   npm install --production
 fi
 
-# Démarrer l'application avec PM2 (gestion des processus Node.js)
-# Si PM2 n'est pas installé, l'installer globalement
+# Vérification et installation de PM2
 if ! command -v pm2 &> /dev/null; then
   echo "Installation de PM2..."
   npm install -g pm2
 fi
 
-# Arrêter l'instance précédente si elle existe
+# Gestion de l'application PM2
+echo "Gestion du processus Node.js..."
 pm2 stop kaiac-backend 2>/dev/null || true
-
-# Démarrer l'application
-echo "Démarrage du backend KaiaC Hosting..."
 pm2 start ecosystem.config.js
-
-# Sauvegarder la configuration PM2 pour redémarrage automatique
 pm2 save
 
-echo "Le backend KaiaC Hosting est en cours d'exécution."
-echo "Pour voir les logs: pm2 logs kaiac-backend"
-echo "Pour arrêter le service: pm2 stop kaiac-backend"
+# Affichage des informations
+echo "-----------------------------------------"
+echo "Backend KaiaC Hosting démarré avec succès"
+echo "Répertoire: $BACKEND_DIR"
+echo "Statut:"
+pm2 list | grep kaiac-backend
+echo "-----------------------------------------"
+echo "Commandes utiles:"
+echo "  Voir les logs: pm2 logs kaiac-backend"
+echo "  Arrêter: pm2 stop kaiac-backend"
+echo "  Redémarrer: pm2 restart kaiac-backend"
