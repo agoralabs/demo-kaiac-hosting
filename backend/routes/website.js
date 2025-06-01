@@ -518,8 +518,7 @@ router.delete('/delete-wordpress/:id', auth, async (req, res) => {
   }
 });
 
-router.post('/update-is-processing-site', auth, async (req, res) => {
-  try {
+router.post('/update-is-processing-site', async (req, res) => {  try {
     const { record, domain } = req.body;
 
       // find website by record and FK Domain.domain_name 
