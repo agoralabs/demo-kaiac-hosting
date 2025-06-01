@@ -2251,7 +2251,7 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
 
   } catch (error) {
     logger.error(error);
-    logger.error('Error retrieving logs:', error.message);
+    logger.error('Error retrieving logs:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2309,7 +2309,7 @@ router.put('/:id/toggle-wp-debug', auth, async (req, res) => {
 
   } catch (error) {
     logger.error(error);
-    logger.error('Error updating WP debug:', error.message);
+    logger.error('Error updating WP debug:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2401,7 +2401,7 @@ router.get('/:id/logs/:logType/download', auth, async (req, res) => {
 
   } catch (error) {
     logger.error(error);
-    logger.error('Error downloading log file:', error.message);
+    logger.error('Error downloading log file:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2516,7 +2516,7 @@ router.put('/:id/toggle-plugin-query-monitor', auth, async (req, res) => {
 
   } catch (error) {
     logger.error(error);
-    logger.error('Error updating WP debug:', error.message);
+    logger.error('Error updating WP debug:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
