@@ -2229,6 +2229,7 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
           const commandInvocation = new GetCommandInvocationCommand({
             CommandId: commandId,
             InstanceId: instanceId,
+            $metadata: { region: process.env.AWS_REGION }
           });
 
           const response = await ssmClient.send(commandInvocation);
