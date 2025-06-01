@@ -28,7 +28,9 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION
 });
 
-const ssmClient = new SSMClient({ region: process.env.AWS_REGION });
+const ssmClient = new SSMClient({ region: process.env.AWS_REGION,
+  maxAttempts: 3, // Active le retry automatique du SDK
+});
 
 dotenv.config();
 
@@ -2210,61 +2212,46 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
     const response = await ssmClient.send(command);
     
     // Wait for command completion with timeout
-    const getCommandOutput = async (
-      commandId, 
-      instanceId, 
-      timeout = 30000,
-      maxRetries = 3,
-      baseDelay = 1000
-    ) => {
+    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
       const startTime = Date.now();
-      let attempt = 0;
-      let lastError = null;
+      let attempts = 0;
 
       while (Date.now() - startTime < timeout) {
-        attempt++;
-        logger.info(`Attempt ${attempt} for command ${commandId}`);
-
+        attempts++;
         try {
           const commandInvocation = new GetCommandInvocationCommand({
             CommandId: commandId,
             InstanceId: instanceId,
-            $metadata: { region: process.env.AWS_REGION }
           });
 
           const response = await ssmClient.send(commandInvocation);
-
+          
           if (response.Status === 'Success') {
             return response.StandardOutputContent;
           } else if (response.Status === 'Failed') {
             throw new Error(`Command failed: ${response.StandardErrorContent}`);
           }
 
-          // If still pending, wait with exponential backoff
-          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 5000);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          // Attente progressive (1s, 2s, 4s...)
+          const waitTime = Math.min(1000 * Math.pow(2, attempts - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
 
         } catch (error) {
-          lastError = error;
-          logger.error(`Attempt ${attempt} failed: ${error.message}`);
-
-          // Check if we should retry
-          if (attempt >= maxRetries || 
-              error.name === 'InvocationDoesNotExist' || 
-              error.message.includes('Command failed')) {
-            break;
+          if (error.name === 'InvocationDoesNotExist') {
+            if (attempts < 3) {
+              // Attente plus longue pour la première propagation
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            }
+            throw new Error(`Command not found after 3 attempts. Verify command ID and region.`);
           }
-
-          // Exponential backoff
-          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 5000);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          throw error;
         }
       }
 
-      throw lastError || new Error('Command timed out');
+      throw new Error(`Timeout after ${timeout}ms waiting for command`);
     };
 
-    
     const commandId = response.Command.CommandId;
     logger.info(`commandId=${commandId}`);
     
