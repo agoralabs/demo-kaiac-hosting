@@ -2214,12 +2214,12 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
       const startTime = Date.now();
       
       while (Date.now() - startTime < timeout) {
-        const command = new GetCommandInvocationCommand({
+        const commandInvocation = new GetCommandInvocationCommand({
           CommandId: commandId,
           InstanceId: instanceId
         });
     
-        const response = await ssmClient.send(command);
+        const response = await ssmClient.send(commandInvocation);
     
         if (response.Status === 'Success') {
           return response.StandardOutputContent;
