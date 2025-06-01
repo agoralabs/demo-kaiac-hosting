@@ -2210,34 +2210,59 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
     const response = await ssmClient.send(command);
     
     // Wait for command completion with timeout
-    const getCommandOutput = async (commandId, instanceId, timeout = 30000) => {
+    const getCommandOutput = async (
+      commandId, 
+      instanceId, 
+      timeout = 30000,
+      maxRetries = 3,
+      baseDelay = 1000
+    ) => {
       const startTime = Date.now();
-      
+      let attempt = 0;
+      let lastError = null;
+
       while (Date.now() - startTime < timeout) {
+        attempt++;
+        logger.info(`Attempt ${attempt} for command ${commandId}`);
 
-        logger.info(`getCommandOutput-commandId=${commandId}`);
-        logger.info(`getCommandOutput-instanceId=${instanceId}`);
+        try {
+          const commandInvocation = new GetCommandInvocationCommand({
+            CommandId: commandId,
+            InstanceId: instanceId,
+          });
 
-        const commandInvocation = new GetCommandInvocationCommand({
-          CommandId: commandId,
-          InstanceId: instanceId,
+          const response = await ssmClient.send(commandInvocation);
 
-        });
-    
-        const response = await ssmClient.send(commandInvocation);
-    
-        if (response.Status === 'Success') {
-          return response.StandardOutputContent;
-        } else if (response.Status === 'Failed') {
-          throw new Error(`Command failed: ${response.StandardErrorContent}`);
+          if (response.Status === 'Success') {
+            return response.StandardOutputContent;
+          } else if (response.Status === 'Failed') {
+            throw new Error(`Command failed: ${response.StandardErrorContent}`);
+          }
+
+          // If still pending, wait with exponential backoff
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+
+        } catch (error) {
+          lastError = error;
+          logger.error(`Attempt ${attempt} failed: ${error.message}`);
+
+          // Check if we should retry
+          if (attempt >= maxRetries || 
+              error.name === 'InvocationDoesNotExist' || 
+              error.message.includes('Command failed')) {
+            break;
+          }
+
+          // Exponential backoff
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-    
-        // Wait 1 second before checking again
-        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    
-      throw new Error('Command timed out');
+
+      throw lastError || new Error('Command timed out');
     };
+
     
     const commandId = response.Command.CommandId;
     logger.info(`commandId=${commandId}`);
