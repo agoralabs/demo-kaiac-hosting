@@ -2556,26 +2556,43 @@ async function executeShellCommand(command, comment, timeout = 30000) {
   const commandId = response.Command.CommandId;
   
   const startTime = Date.now();
+  let attempts = 0;
   
   while (Date.now() - startTime < timeout) {
-    const getCommand = new GetCommandInvocationCommand({
-      CommandId: commandId,
-      InstanceId: ec2_instance_id
-    });
+    attempts++;
+    try {
+      const getCommand = new GetCommandInvocationCommand({
+        CommandId: commandId,
+        InstanceId: ec2_instance_id
+      });
 
-    const commandResponse = await ssmClient.send(getCommand);
+      const commandResponse = await ssmClient.send(getCommand);
 
-    if (commandResponse.Status === 'Success') {
-      return commandResponse.StandardOutputContent;
-    } else if (commandResponse.Status === 'Failed') {
-      throw new Error(`Command failed: ${commandResponse.StandardErrorContent}`);
+      if (commandResponse.Status === 'Success') {
+        return commandResponse.StandardOutputContent;
+      } else if (commandResponse.Status === 'Failed') {
+        throw new Error(`Command failed: ${commandResponse.StandardErrorContent}`);
+      }
+
+      // Attente progressive (1s, 2s, 4s...)
+      const waitTime = Math.min(1000 * Math.pow(2, attempts - 1), 5000);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+    } catch (error) {
+      if (error.name === 'InvocationDoesNotExist') {
+        if (attempts < 3) {
+          // Attente plus longue pour la première propagation
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        throw new Error(`Command not found after 3 attempts. Verify command ID and region.`);
+      }
+      throw error;
     }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
-  throw new Error('Command timed out');
-}   
+  throw new Error(`Timeout after ${timeout}ms waiting for command`);
+}
 
 // get generated wp config
 router.get('/:id/generate-wp-report', auth, async (req, res) => {
