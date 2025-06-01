@@ -2216,7 +2216,7 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
       while (Date.now() - startTime < timeout) {
 
         logger.info(`getCommandOutput-commandId=${commandId}`);
-        logger.info(`-getCommandOutputinstanceId=${instanceId}`);
+        logger.info(`getCommandOutput-instanceId=${instanceId}`);
 
         const commandInvocation = new GetCommandInvocationCommand({
           CommandId: commandId,
