@@ -2214,9 +2214,14 @@ router.get('/:id/logs/:logType', auth, async (req, res) => {
       const startTime = Date.now();
       
       while (Date.now() - startTime < timeout) {
+
+        logger.info(`getCommandOutput-commandId=${commandId}`);
+        logger.info(`-getCommandOutputinstanceId=${instanceId}`);
+
         const commandInvocation = new GetCommandInvocationCommand({
           CommandId: commandId,
-          InstanceId: instanceId
+          InstanceId: instanceId,
+
         });
     
         const response = await ssmClient.send(commandInvocation);
